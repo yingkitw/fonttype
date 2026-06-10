@@ -2,6 +2,13 @@
 name = "fonttype"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
+description = "A font parsing and manipulation library"
+homepage = "https://github.com/yingkitw/fonttype"
+repository = "https://github.com/yingkitw/fonttype"
+documentation = "https://docs.rs/fonttype"
+keywords = ["font", "type", "parser", "manipulator"]
+categories = ["graphics", "multimedia::images"]
 
 [dependencies]
 byteorder = "1.5"
