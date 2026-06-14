@@ -110,17 +110,29 @@ impl<'a> Parser<'a> {
 
     pub fn checksum(&mut self, length: usize) -> Result<u32, FontError> {
         let data = self.slice(length)?;
-        let mut sum: u32 = 0;
-        let mut i = 0;
-        while i + 4 <= data.len() {
-            sum = sum.wrapping_add(u32::from_be_bytes([
-                data[i],
-                data[i + 1],
-                data[i + 2],
-                data[i + 3],
-            ]));
-            i += 4;
-        }
-        Ok(sum)
+        Ok(checksum_table(data))
     }
+}
+
+pub fn checksum_table(data: &[u8]) -> u32 {
+    let mut sum: u32 = 0;
+    let mut i = 0;
+    while i + 4 <= data.len() {
+        sum = sum.wrapping_add(u32::from_be_bytes([
+            data[i],
+            data[i + 1],
+            data[i + 2],
+            data[i + 3],
+        ]));
+        i += 4;
+    }
+    // Handle trailing bytes (pad with zeros)
+    if i < data.len() {
+        let mut remainder = [0u8; 4];
+        for j in i..data.len() {
+            remainder[j - i] = data[j];
+        }
+        sum = sum.wrapping_add(u32::from_be_bytes(remainder));
+    }
+    sum
 }

@@ -16,6 +16,9 @@
     ├── parse.rs        — Binary reading helpers (big-endian, offsets)
     ├── write.rs        — Binary writing helpers
     ├── font.rs         — Core Font struct and table directory
+    ├── woff.rs       — WOFF read/write
+    ├── woff2.rs      — WOFF2 read/write (Brotli)
+    ├── ttc.rs          — TrueType Collection parsing
     └── tables
         ├── mod.rs      — Table trait and registry
         ├── head.rs     — head table
@@ -24,7 +27,17 @@
         ├── post.rs     — post table
         ├── name.rs     — name table
         ├── cmap.rs     — cmap table
-        └── os2.rs      — OS/2 table
+        ├── os2.rs      — OS/2 table
+        ├── glyf.rs     — glyph data (simple + composite)
+        ├── loca.rs     — glyph offsets
+        ├── hmtx.rs     — horizontal metrics
+        ├── kern.rs     — kerning
+        ├── gpos.rs     — GPOS (kerning pairs)
+        ├── gsub.rs     — GSUB (features)
+        ├── var.rs      — HVAR / gvar passthrough
+        ├── fvar.rs     — variable font axes
+        ├── stat.rs     — STAT style attributes
+        └── cff.rs      — CFF / CFF2 PostScript outlines
 ```
 
 ## Core Abstractions
@@ -44,6 +57,18 @@ pub struct Font {
     pub name: Name,
     pub cmap: Cmap,
     pub os2: Os2,
+    pub glyf: Option<GlyfTable>,
+    pub loca: Option<LocaTable>,
+    pub hmtx: Hmtx,
+    pub kern: Option<Kern>,
+    pub gpos: Option<Gpos>,
+    pub gsub: Option<Gsub>,
+    pub hvar: Option<Hvar>,
+    pub gvar: Option<Gvar>,
+    pub fvar: Option<Fvar>,
+    pub stat: Option<Stat>,
+    pub cff: Option<Cff>,
+    pub raw_tables: Vec<(Tag, Vec<u8>)>,
 }
 ```
 
@@ -91,3 +116,6 @@ All fallible operations return `FontError`, a `thiserror` enum covering:
 - `byteorder` — big-endian integer parsing
 - `thiserror` — ergonomic error types
 - `clap` — CLI argument parsing
+- `flate2` — WOFF zlib compression/decompression
+- `brotli` — WOFF2 Brotli compression/decompression
+- `image` — PNG rasterization and bitmap tracing

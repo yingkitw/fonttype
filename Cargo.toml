@@ -1,6 +1,6 @@
 [package]
 name = "fonttype"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "Apache-2.0"
 description = "A font parsing and manipulation library"
@@ -15,6 +15,7 @@ byteorder = "1.5"
 thiserror = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 flate2 = "1.0"
+brotli = "7"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [[bin]]

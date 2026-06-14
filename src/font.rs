@@ -1,6 +1,6 @@
 use crate::error::{FontError, Tag};
 use crate::parse::Parser;
-use crate::tables::{Table, head::Head, hhea::Hhea, maxp::Maxp, post::Post, name::Name, cmap::Cmap, os2::Os2, glyf::GlyfTable, loca::LocaTable, hmtx::Hmtx, kern::Kern, gpos::Gpos, gsub::Gsub, var::{Hvar, Gvar}};
+use crate::tables::{Table, head::Head, hhea::Hhea, maxp::Maxp, post::Post, name::Name, cmap::Cmap, os2::Os2, glyf::GlyfTable, loca::LocaTable, hmtx::Hmtx, kern::Kern, gpos::Gpos, gsub::Gsub, var::{Hvar, Gvar}, fvar::Fvar, stat::Stat, cff::Cff};
 use crate::write::Writer;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +39,9 @@ pub struct Font {
     pub gsub: Option<Gsub>,
     pub hvar: Option<Hvar>,
     pub gvar: Option<Gvar>,
+    pub fvar: Option<Fvar>,
+    pub stat: Option<Stat>,
+    pub cff: Option<Cff>,
     pub raw_tables: Vec<(Tag, Vec<u8>)>,
 }
 
@@ -114,6 +117,18 @@ impl Font {
             let data = Parser::new(buf, rec.offset as usize).slice(rec.length as usize).ok()?;
             Gvar::parse(data).ok()
         });
+        let fvar = find(Fvar::tag()).ok().and_then(|rec| {
+            let data = Parser::new(buf, rec.offset as usize).slice(rec.length as usize).ok()?;
+            Fvar::parse(data).ok()
+        });
+        let stat = find(Stat::tag()).ok().and_then(|rec| {
+            let data = Parser::new(buf, rec.offset as usize).slice(rec.length as usize).ok()?;
+            Stat::parse(data).ok()
+        });
+        let cff = find(Cff::tag()).ok().and_then(|rec| {
+            let data = Parser::new(buf, rec.offset as usize).slice(rec.length as usize).ok()?;
+            Cff::parse(data).ok()
+        });
 
         let mut glyf: Option<GlyfTable> = None;
         let mut loca: Option<LocaTable> = None;
@@ -131,7 +146,7 @@ impl Font {
 
         let mut raw_tables = Vec::new();
         for rec in &tables {
-            let known = [Head::tag(), Hhea::tag(), Maxp::tag(), Post::tag(), Name::tag(), Cmap::tag(), Os2::tag(), GlyfTable::tag(), LocaTable::tag(), Hmtx::tag(), Kern::tag(), Tag::new(b"cvt "), Tag::new(b"prep"), Tag::new(b"fpgm"), Gpos::tag(), Gsub::tag(), Hvar::tag(), Gvar::tag()];
+            let known = [Head::tag(), Hhea::tag(), Maxp::tag(), Post::tag(), Name::tag(), Cmap::tag(), Os2::tag(), GlyfTable::tag(), LocaTable::tag(), Hmtx::tag(), Kern::tag(), Tag::new(b"cvt "), Tag::new(b"prep"), Tag::new(b"fpgm"), Gpos::tag(), Gsub::tag(), Hvar::tag(), Gvar::tag(), Fvar::tag(), Stat::tag(), Cff::tag()];
             if !known.contains(&rec.tag) {
                 let data = Parser::new(buf, rec.offset as usize).slice(rec.length as usize)?;
                 raw_tables.push((rec.tag.clone(), data.to_vec()));
@@ -159,6 +174,9 @@ impl Font {
             gsub,
             hvar,
             gvar,
+            fvar,
+            stat,
+            cff,
             raw_tables,
         })
     }
@@ -166,8 +184,12 @@ impl Font {
     pub fn write(&self) -> Result<Vec<u8>, FontError> {
         let mut table_data: Vec<(Tag, Vec<u8>)> = Vec::new();
 
+        let mut head = self.head.clone();
+        if self.glyf.is_some() {
+            head.index_to_loc_format = 1; // long offsets
+        }
         let mut w = Writer::new();
-        self.head.write(&mut w)?;
+        head.write(&mut w)?;
         table_data.push((Head::tag(), w.into_vec()));
 
         let mut w = Writer::new();
@@ -235,12 +257,35 @@ impl Font {
             gvar.write(&mut w)?;
             table_data.push((Gvar::tag(), w.into_vec()));
         }
-
-        if let (Some(glyf), Some(loca)) = (&self.glyf, &self.loca) {
-            table_data.push((GlyfTable::tag(), glyf.write()));
-
+        if let Some(fvar) = &self.fvar {
             let mut w = Writer::new();
-            loca.write(&mut w)?;
+            fvar.write(&mut w)?;
+            table_data.push((Fvar::tag(), w.into_vec()));
+        }
+        if let Some(stat) = &self.stat {
+            let mut w = Writer::new();
+            stat.write(&mut w)?;
+            table_data.push((Stat::tag(), w.into_vec()));
+        }
+        if let Some(cff) = &self.cff {
+            let mut w = Writer::new();
+            cff.write(&mut w)?;
+            table_data.push((Cff::tag(), w.into_vec()));
+        }
+
+        if let Some(glyf) = &self.glyf {
+            let mut glyf_w = Writer::new();
+            let mut glyph_sizes = Vec::with_capacity(glyf.glyphs.len());
+            for glyph in &glyf.glyphs {
+                let start = glyf_w.len();
+                glyph.write(&mut glyf_w);
+                glyph_sizes.push(glyf_w.len() - start);
+            }
+            table_data.push((GlyfTable::tag(), glyf_w.into_vec()));
+
+            let new_loca = LocaTable::from_glyph_sizes(&glyph_sizes, true);
+            let mut w = Writer::new();
+            new_loca.write(&mut w)?;
             table_data.push((LocaTable::tag(), w.into_vec()));
         }
 
@@ -486,6 +531,9 @@ impl Font {
             gsub: None,
             hvar: None,
             gvar: None,
+            fvar: None,
+            stat: None,
+            cff: None,
             raw_tables: vec![],
         }
     }
@@ -588,9 +636,12 @@ impl Font {
             }
         }
 
-        // GPOS/GSUB glyph IDs are invalidated by subsetting
+        // GPOS/GSUB/fvar/stat/cff glyph IDs are invalidated by subsetting
         new_font.gpos = None;
         new_font.gsub = None;
+        new_font.fvar = None;
+        new_font.stat = None;
+        new_font.cff = None;
 
         new_font
     }

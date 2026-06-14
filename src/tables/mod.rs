@@ -16,6 +16,9 @@ pub mod hinting;
 pub mod gpos;
 pub mod gsub;
 pub mod var;
+pub mod fvar;
+pub mod stat;
+pub mod cff;
 
 pub trait Table: Sized {
     fn tag() -> Tag;

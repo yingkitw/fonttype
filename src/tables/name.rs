@@ -43,6 +43,22 @@ impl Name {
             .find(|r| r.name_id == name_id)
             .map(|r| r.string.clone())
     }
+
+    pub fn set_family(&mut self, name: &str) {
+        for rec in &mut self.records {
+            if rec.name_id == 1 {
+                rec.string = name.to_string();
+            }
+        }
+    }
+
+    pub fn set_subfamily(&mut self, name: &str) {
+        for rec in &mut self.records {
+            if rec.name_id == 2 {
+                rec.string = name.to_string();
+            }
+        }
+    }
 }
 
 impl Table for Name {

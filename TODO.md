@@ -4,9 +4,29 @@
 
 ## Planned
 
-- [ ] Parse `hvar` / `gvar` tables (variable fonts)
-- [ ] WOFF / WOFF2 support
-- [ ] Merging fonts
+### Phase 1 — CLI Utilities
+- [x] `tables` command — list all tables with offset, length, checksum
+- [x] `map` command — query cmap: codepoint → glyph ID or glyph ID → codepoint(s)
+- [x] `stats` command — show font statistics (glyph count, table sizes, metrics summary)
+- [x] `fix` command — rewrite font with recomputed checksums and alignment
+
+### Phase 2 — Parsing Improvements
+- [x] Composite glyph parsing in `glyf` (currently stubbed as Empty)
+- [x] `fvar` table parsing — variable font design axes
+- [x] `STAT` table parsing — style attributes for variable fonts
+
+### Phase 3 — Advanced Manipulation
+- [x] `extract` command — dump a single table to a binary file
+- [x] `inject` command — replace or insert a table from a binary file
+- [x] `rename` command — modify family / subfamily names in the `name` table
+- [x] `strip` command — remove hinting tables (`cvt `, `prep`, `fpgm`) to reduce file size
+- [x] `coverage` command — report Unicode block coverage
+- [x] `compare` command — structural diff between two fonts
+
+### Phase 4 — Format & Infrastructure
+- [x] WOFF2 read/write support (Brotli-compressed)
+- [x] TrueType Collection (`.ttc`) parsing
+- [x] CFF / CFF2 table parsing for PostScript-outline OTFs
 
 ## Done
 
@@ -40,3 +60,6 @@
 - [x] WOFF read/write support (`to-woff`, `from-woff`)
 - [x] Font merging (`merge` command)
 - [x] Round-trip test suite with real font files (Geneva.ttf read + validate)
+- [x] WOFF2 read/write support (`to-woff2`, `from-woff2`)
+- [x] TrueType Collection (`.ttc`) parsing (`ttc-info`)
+- [x] CFF / CFF2 table basic parsing for PostScript-outline OTFs

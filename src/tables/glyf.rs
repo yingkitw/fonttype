@@ -162,12 +162,45 @@ impl CompositeGlyph {
             let mut flags = comp.flags;
             if i < self.components.len() - 1 {
                 flags |= 0x0020; // MORE_COMPONENTS
+            } else {
+                flags &= !0x0020;
+            }
+            // Determine if args fit in bytes
+            let args_fit_byte = comp.argument1 >= i8::MIN as i16
+                && comp.argument1 <= i8::MAX as i16
+                && comp.argument2 >= i8::MIN as i16
+                && comp.argument2 <= i8::MAX as i16;
+            if args_fit_byte {
+                flags &= !0x0001; // clear ARG_1_AND_2_ARE_WORDS
+            } else {
+                flags |= 0x0001; // set ARG_1_AND_2_ARE_WORDS
             }
             w.write_u16(flags);
             w.write_u16(comp.glyph_index);
-            // Simplified: always write 2-byte args and no transform for now
-            w.write_i16(comp.argument1);
-            w.write_i16(comp.argument2);
+            if args_fit_byte {
+                w.write_i8(comp.argument1 as i8);
+                w.write_i8(comp.argument2 as i8);
+            } else {
+                w.write_i16(comp.argument1);
+                w.write_i16(comp.argument2);
+            }
+            if let Some(ref t) = comp.transformation {
+                match *t {
+                    CompositeTransform::Scale(s) => {
+                        w.write_i16((s * 16384.0) as i16);
+                    }
+                    CompositeTransform::XyScale(x, y) => {
+                        w.write_i16((x * 16384.0) as i16);
+                        w.write_i16((y * 16384.0) as i16);
+                    }
+                    CompositeTransform::TwoByTwo(a, b, c, d) => {
+                        w.write_i16((a * 16384.0) as i16);
+                        w.write_i16((b * 16384.0) as i16);
+                        w.write_i16((c * 16384.0) as i16);
+                        w.write_i16((d * 16384.0) as i16);
+                    }
+                }
+            }
         }
     }
 }
@@ -194,24 +227,39 @@ impl GlyfTable {
                 let x_max = i16::from_be_bytes([slice[6], slice[7]]);
                 let y_max = i16::from_be_bytes([slice[8], slice[9]]);
                 let mut offset = 10usize;
+                if slice.len() < 10 + num_contours as usize * 2 + 2 {
+                    glyphs.push(Glyph::Empty);
+                    continue;
+                }
                 let mut end_pts = Vec::with_capacity(num_contours as usize);
                 for _ in 0..num_contours {
+                    if offset + 1 >= slice.len() { break; }
                     let pt = u16::from_be_bytes([slice[offset], slice[offset + 1]]);
                     end_pts.push(pt);
                     offset += 2;
                 }
+                if offset + 1 >= slice.len() {
+                    glyphs.push(Glyph::Empty);
+                    continue;
+                }
                 let instr_len = u16::from_be_bytes([slice[offset], slice[offset + 1]]);
                 offset += 2;
+                if offset + instr_len as usize > slice.len() {
+                    glyphs.push(Glyph::Empty);
+                    continue;
+                }
                 let instructions = slice[offset..offset + instr_len as usize].to_vec();
                 offset += instr_len as usize;
                 let total_pts = end_pts.last().copied().unwrap_or(0) as usize + 1;
                 let mut flags = Vec::with_capacity(total_pts);
                 let mut j = 0;
                 while j < total_pts {
+                    if offset >= slice.len() { break; }
                     let flag = slice[offset];
                     offset += 1;
                     flags.push(flag);
                     if flag & 0x08 != 0 {
+                        if offset >= slice.len() { break; }
                         let repeat = slice[offset];
                         offset += 1;
                         for _ in 0..repeat {
@@ -223,6 +271,7 @@ impl GlyfTable {
                 }
                 let mut x_coords = Vec::with_capacity(total_pts);
                 for &flag in &flags {
+                    if offset >= slice.len() { break; }
                     if flag & 0x02 != 0 {
                         // short vector
                         let v = slice[offset] as i16;
@@ -233,6 +282,7 @@ impl GlyfTable {
                         if flag & 0x10 != 0 {
                             x_coords.push(0);
                         } else {
+                            if offset + 2 > slice.len() { break; }
                             let v = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
                             offset += 2;
                             x_coords.push(v);
@@ -241,6 +291,7 @@ impl GlyfTable {
                 }
                 let mut y_coords = Vec::with_capacity(total_pts);
                 for &flag in &flags {
+                    if offset >= slice.len() { break; }
                     if flag & 0x04 != 0 {
                         let v = slice[offset] as i16;
                         offset += 1;
@@ -250,6 +301,7 @@ impl GlyfTable {
                         if flag & 0x20 != 0 {
                             y_coords.push(0);
                         } else {
+                            if offset + 2 > slice.len() { break; }
                             let v = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
                             offset += 2;
                             y_coords.push(v);
@@ -269,8 +321,84 @@ impl GlyfTable {
                     y_coordinates: y_coords,
                 }));
             } else {
-                // Composite glyph parsing is complex; skip for now
-                glyphs.push(Glyph::Empty);
+                let x_min = i16::from_be_bytes([slice[2], slice[3]]);
+                let y_min = i16::from_be_bytes([slice[4], slice[5]]);
+                let x_max = i16::from_be_bytes([slice[6], slice[7]]);
+                let y_max = i16::from_be_bytes([slice[8], slice[9]]);
+                let mut offset = 10usize;
+                let mut components = Vec::new();
+                let mut has_more = true;
+                while has_more {
+                    let flags = u16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                    offset += 2;
+                    let glyph_index = u16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                    offset += 2;
+
+                    let arg1: i16;
+                    let arg2: i16;
+                    if flags & 0x0001 != 0 {
+                        arg1 = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        arg2 = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                    } else {
+                        arg1 = slice[offset] as i8 as i16;
+                        offset += 1;
+                        arg2 = slice[offset] as i8 as i16;
+                        offset += 1;
+                    }
+
+                    let mut transformation = None;
+                    if flags & 0x0008 != 0 {
+                        // WE_HAVE_A_SCALE
+                        let val = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        transformation = Some(CompositeTransform::Scale(val as f32 / 16384.0));
+                    } else if flags & 0x0040 != 0 {
+                        // WE_HAVE_AN_X_AND_Y_SCALE
+                        let xscale = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        let yscale = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        transformation = Some(CompositeTransform::XyScale(
+                            xscale as f32 / 16384.0,
+                            yscale as f32 / 16384.0,
+                        ));
+                    } else if flags & 0x0080 != 0 {
+                        // WE_HAVE_A_TWO_BY_TWO
+                        let a = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        let b = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        let c = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        let d = i16::from_be_bytes([slice[offset], slice[offset + 1]]);
+                        offset += 2;
+                        transformation = Some(CompositeTransform::TwoByTwo(
+                            a as f32 / 16384.0,
+                            b as f32 / 16384.0,
+                            c as f32 / 16384.0,
+                            d as f32 / 16384.0,
+                        ));
+                    }
+
+                    components.push(CompositeComponent {
+                        glyph_index,
+                        flags,
+                        argument1: arg1,
+                        argument2: arg2,
+                        transformation,
+                    });
+
+                    has_more = flags & 0x0020 != 0;
+                }
+                glyphs.push(Glyph::Composite(CompositeGlyph {
+                    x_min,
+                    y_min,
+                    x_max,
+                    y_max,
+                    components,
+                }));
             }
         }
         Ok(GlyfTable { glyphs })

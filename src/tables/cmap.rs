@@ -58,6 +58,16 @@ impl Cmap {
         }
         None
     }
+
+    pub fn glyph_codepoints(&self, glyph_id: u16) -> Vec<u32> {
+        let mut cps = Vec::new();
+        for subtable in &self.subtables {
+            cps.extend(subtable.codepoints_for_glyph(glyph_id));
+        }
+        cps.sort_unstable();
+        cps.dedup();
+        cps
+    }
 }
 
 impl CmapSubtable {
@@ -92,6 +102,45 @@ impl CmapSubtable {
                     }
                 }
                 None
+            }
+        }
+    }
+
+    pub fn codepoints_for_glyph(&self, glyph_id: u16) -> Vec<u32> {
+        match self {
+            CmapSubtable::Format0 { glyph_id_array, .. } => {
+                glyph_id_array.iter().enumerate()
+                    .filter(|(_, g)| **g == glyph_id as u8)
+                    .map(|(cp, _)| cp as u32)
+                    .collect()
+            }
+            CmapSubtable::Format4 { segments, .. } => {
+                let mut cps = Vec::new();
+                for seg in segments {
+                    if seg.id_range_offset == 0 {
+                        let start = seg.start_code as i32;
+                        let end = seg.end_code as i32;
+                        let delta = seg.id_delta as i32;
+                        for cp in start..=end {
+                            if ((cp + delta) as u16) == glyph_id {
+                                cps.push(cp as u32);
+                            }
+                        }
+                    }
+                }
+                cps
+            }
+            CmapSubtable::Format12 { groups, .. } => {
+                let mut cps = Vec::new();
+                for g in groups {
+                    let start_gid = g.start_glyph_id;
+                    let end_gid = g.start_glyph_id + (g.end_char_code - g.start_char_code);
+                    if glyph_id as u32 >= start_gid && glyph_id as u32 <= end_gid {
+                        let offset = glyph_id as u32 - start_gid;
+                        cps.push(g.start_char_code + offset);
+                    }
+                }
+                cps
             }
         }
     }

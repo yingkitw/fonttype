@@ -23,6 +23,10 @@ impl Writer {
         self.buf.push(v);
     }
 
+    pub fn write_i8(&mut self, v: i8) {
+        self.buf.push(v as u8);
+    }
+
     pub fn write_u16(&mut self, v: u16) {
         self.buf.extend_from_slice(&v.to_be_bytes());
     }
