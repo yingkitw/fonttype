@@ -685,6 +685,66 @@ impl Font {
             ));
         }
 
+        // Table overlap detection
+        for i in 0..self.tables.len() {
+            for j in (i + 1)..self.tables.len() {
+                let a = &self.tables[i];
+                let b = &self.tables[j];
+                let a_start = a.offset;
+                let a_end = a.offset + a.length;
+                let b_start = b.offset;
+                let b_end = b.offset + b.length;
+                if a_start < b_end && b_start < a_end {
+                    issues.push(format!(
+                        "Tables {} and {} overlap ({}..{} vs {}..{})",
+                        a.tag, b.tag, a_start, a_end, b_start, b_end
+                    ));
+                }
+            }
+        }
+
+        // Table directory should be sorted by tag
+        for i in 1..self.tables.len() {
+            if self.tables[i - 1].tag.0 > self.tables[i].tag.0 {
+                issues.push(format!(
+                    "Table directory not sorted: {} before {}",
+                    self.tables[i - 1].tag, self.tables[i].tag
+                ));
+            }
+        }
+
+        // head table structural checks
+        if self.head.magic_number != 0x5F0F3CF5 {
+            issues.push(format!(
+                "head.magicNumber is 0x{:08X}, expected 0x5F0F3CF5",
+                self.head.magic_number
+            ));
+        }
+        if self.head.units_per_em < 16 || self.head.units_per_em > 16384 {
+            issues.push(format!(
+                "head.unitsPerEm is {}, expected 16..16384",
+                self.head.units_per_em
+            ));
+        }
+
+        // hhea consistency
+        if self.hhea.number_of_hmetrics > self.maxp.num_glyphs {
+            issues.push(format!(
+                "hhea.numberOfHMetrics ({}) > maxp.numGlyphs ({})",
+                self.hhea.number_of_hmetrics, self.maxp.num_glyphs
+            ));
+        }
+
+        // glyf and loca should appear together for TrueType outlines
+        let has_glyf = self.tables.iter().any(|t| t.tag == Tag::new(b"glyf"));
+        let has_loca = self.tables.iter().any(|t| t.tag == Tag::new(b"loca"));
+        if has_glyf != has_loca {
+            issues.push(format!(
+                "glyf and loca must both be present or both absent (glyf={}, loca={})",
+                has_glyf, has_loca
+            ));
+        }
+
         // Verify checksums from raw buffer
         for rec in &self.tables {
             let start = rec.offset as usize;

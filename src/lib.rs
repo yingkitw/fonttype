@@ -197,6 +197,62 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_head_magic_number() {
+        let font = Font::create_minimal();
+        let bytes = font.write().unwrap();
+        let mut font2 = Font::read(&bytes).unwrap();
+        font2.head.magic_number = 0x12345678;
+        let issues = font2.validate(&bytes);
+        assert!(issues.iter().any(|i| i.contains("magicNumber")));
+    }
+
+    #[test]
+    fn test_validate_head_units_per_em() {
+        let font = Font::create_minimal();
+        let bytes = font.write().unwrap();
+        let mut font2 = Font::read(&bytes).unwrap();
+        font2.head.units_per_em = 8; // below minimum 16
+        let issues = font2.validate(&bytes);
+        assert!(issues.iter().any(|i| i.contains("unitsPerEm")));
+    }
+
+    #[test]
+    fn test_validate_hhea_number_of_hmetrics() {
+        let font = Font::create_minimal();
+        let bytes = font.write().unwrap();
+        let mut font2 = Font::read(&bytes).unwrap();
+        font2.hhea.number_of_hmetrics = 100; // greater than num_glyphs
+        let issues = font2.validate(&bytes);
+        assert!(issues.iter().any(|i| i.contains("numberOfHMetrics")));
+    }
+
+    #[test]
+    fn test_validate_glyf_loca_together() {
+        let font = Font::create_minimal();
+        let bytes = font.write().unwrap();
+        let mut font2 = Font::read(&bytes).unwrap();
+        // Remove glyf but keep loca
+        font2.glyf = None;
+        font2.tables.retain(|t| t.tag != Tag::new(b"glyf"));
+        let issues = font2.validate(&bytes);
+        assert!(issues.iter().any(|i| i.contains("glyf and loca must both")));
+    }
+
+    #[test]
+    fn test_validate_table_overlap() {
+        let font = Font::create_minimal();
+        let bytes = font.write().unwrap();
+        let mut font2 = Font::read(&bytes).unwrap();
+        // Make two tables overlap by giving them the same offset
+        if font2.tables.len() >= 2 {
+            font2.tables[1].offset = font2.tables[0].offset;
+            font2.tables[1].length = font2.tables[0].length;
+        }
+        let issues = font2.validate(&bytes);
+        assert!(issues.iter().any(|i| i.contains("overlap")));
+    }
+
+    #[test]
     fn test_read_real_font_geneva() {
         let path = "/System/Library/Fonts/Geneva.ttf";
         if !std::path::Path::new(path).exists() {
