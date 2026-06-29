@@ -28,7 +28,7 @@
 - `maxp` — maximum profile
 - `post` — PostScript data
 - `name` — naming table
-- `cmap` — character to glyph mapping (formats 0, 4, 12)
+- `cmap` — character to glyph mapping (formats 0, 4, 6, 10, 12, 13, 14)
 - `OS/2` — OS/2 and Windows metrics
 - `glyf` — glyph data (simple and composite)
 - `loca` — glyph offsets
@@ -82,11 +82,10 @@ std::fs::write("out.ttf", out)?;
 
 ## Non-Goals (v0.1)
 
-- Glyph outline rasterization
 - Hinting execution
-- Full OpenType layout (GPOS/GSUB)
+- Full OpenType layout (GPOS/GSUB) — only basic kerning pairs and feature tags
 - Variable font instance generation
-- Font subsetting
+- CFF2 outline editing
 
 ## Test Strategy
 

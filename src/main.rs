@@ -531,6 +531,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
+                    fonttype::tables::cmap::CmapSubtable::Format6 { first_code, glyph_id_array, .. } => {
+                        for (i, &gid) in glyph_id_array.iter().enumerate() {
+                            if gid != 0 {
+                                cps.push(*first_code as u32 + i as u32);
+                            }
+                        }
+                    }
+                    fonttype::tables::cmap::CmapSubtable::Format10 { start_char_code, glyph_id_array, .. } => {
+                        for (i, &gid) in glyph_id_array.iter().enumerate() {
+                            if gid != 0 {
+                                cps.push(*start_char_code + i as u32);
+                            }
+                        }
+                    }
+                    fonttype::tables::cmap::CmapSubtable::Format13 { groups, .. } => {
+                        for g in groups {
+                            for cp in g.start_char_code..=g.end_char_code {
+                                cps.push(cp);
+                            }
+                        }
+                    }
+                    fonttype::tables::cmap::CmapSubtable::Format14 { .. } => {
+                        // Format 14 does not map single codepoints to glyphs
+                    }
                 }
             }
             cps.sort_unstable();

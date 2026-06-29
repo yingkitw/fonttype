@@ -150,7 +150,7 @@ fn parse_dict(data: &[u8]) -> Vec<TopDictEntry> {
     let mut i = 0;
     while i < data.len() {
         let b0 = data[i];
-        if b0 >= 0 && b0 <= 21 {
+        if b0 <= 21 {
             // Operator
             let op = if b0 == 12 {
                 i += 1;

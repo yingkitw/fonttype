@@ -35,6 +35,11 @@ impl Writer {
         self.buf.extend_from_slice(&v.to_be_bytes());
     }
 
+    pub fn write_u24(&mut self, v: u32) {
+        let bytes = v.to_be_bytes();
+        self.buf.extend_from_slice(&bytes[1..4]);
+    }
+
     pub fn write_u32(&mut self, v: u32) {
         self.buf.extend_from_slice(&v.to_be_bytes());
     }

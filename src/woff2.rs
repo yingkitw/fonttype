@@ -150,7 +150,7 @@ pub fn write_woff2(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
 
     // Build WOFF2 table directory
     let mut dir = Writer::new();
-    for (tag, _offset, orig_len, data) in &table_entries {
+    for (tag, _offset, orig_len, _data) in &table_entries {
         // Find known tag index
         let known = [
             b"cmap", b"head", b"hhea", b"hmtx", b"maxp", b"name", b"OS/2",
@@ -162,12 +162,11 @@ pub fn write_woff2(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
             b"PCLT", b"VDMX", b"vhea", b"vmtx", b"MATH", b"CPAL", b"SVG ",
             b"sbix", b"CBDT", b"CBLC", b"COLR", b"JSUF", b"DSIG", b"EBDT",
         ];
-        let mut flags: u8 = 0;
-        if let Some(idx) = known.iter().position(|&k| *k == tag.0) {
-            flags = idx as u8;
+        let flags = if let Some(idx) = known.iter().position(|&k| *k == tag.0) {
+            idx as u8
         } else {
-            flags = 0x3F;
-        }
+            0x3F
+        };
         dir.write_u8(flags);
         if flags == 0x3F {
             dir.write_tag(&tag.0);
@@ -198,7 +197,7 @@ pub fn write_woff2(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
     let mut w = Writer::new();
     w.write_u32(0x774F4632); // signature
     w.write_u32(0x00010000); // flavor (TrueType)
-    let mut length_placeholder = w.len();
+    let _length_placeholder = w.len();
     w.write_u32(0); // length placeholder
     w.write_u16(num_tables);
     w.write_u16(0); // reserved

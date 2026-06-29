@@ -66,6 +66,12 @@ impl<'a> Parser<'a> {
         Ok(i16::from_be_bytes([b[0], b[1]]))
     }
 
+    pub fn u24(&mut self) -> Result<u32, FontError> {
+        let b = self.slice(3)?;
+        self.offset += 3;
+        Ok(u32::from_be_bytes([0, b[0], b[1], b[2]]))
+    }
+
     pub fn u32(&mut self) -> Result<u32, FontError> {
         let b = self.slice(4)?;
         self.offset += 4;

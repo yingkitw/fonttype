@@ -850,4 +850,137 @@ mod tests {
             .wrapping_add(u32::from_be_bytes([0x04, 0x05, 0x00, 0x00]));
         assert_eq!(sum, expected);
     }
+
+    #[test]
+    fn test_cmap_format6_roundtrip() {
+        use tables::cmap::{Cmap, CmapSubtable, EncodingRecord};
+        let cmap = Cmap {
+            version: 0,
+            num_tables: 1,
+            records: vec![EncodingRecord { platform_id: 0, encoding_id: 1, subtable_offset: 0 }],
+            subtables: vec![
+                CmapSubtable::Format6 {
+                    language: 0,
+                    first_code: 0x41,
+                    glyph_id_array: vec![10, 11, 12, 13, 14],
+                },
+            ],
+        };
+        let mut w = Writer::new();
+        cmap.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Cmap::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.map_codepoint(0x41), Some(10));
+        assert_eq!(parsed.map_codepoint(0x43), Some(12));
+        assert_eq!(parsed.map_codepoint(0x40), None);
+        assert_eq!(parsed.map_codepoint(0x46), None);
+        assert_eq!(parsed.glyph_codepoints(12), vec![0x43]);
+    }
+
+    #[test]
+    fn test_cmap_format10_roundtrip() {
+        use tables::cmap::{Cmap, CmapSubtable, EncodingRecord};
+        let cmap = Cmap {
+            version: 0,
+            num_tables: 1,
+            records: vec![EncodingRecord { platform_id: 0, encoding_id: 4, subtable_offset: 0 }],
+            subtables: vec![
+                CmapSubtable::Format10 {
+                    language: 0,
+                    start_char_code: 0x1F600,
+                    glyph_id_array: vec![100, 101, 102],
+                },
+            ],
+        };
+        let mut w = Writer::new();
+        cmap.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Cmap::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.map_codepoint(0x1F600), Some(100));
+        assert_eq!(parsed.map_codepoint(0x1F602), Some(102));
+        assert_eq!(parsed.map_codepoint(0x1F5FF), None);
+        assert_eq!(parsed.map_codepoint(0x1F603), None);
+    }
+
+    #[test]
+    fn test_cmap_format13_roundtrip() {
+        use tables::cmap::{Cmap, CmapSubtable, ConstantMapGroup, EncodingRecord};
+        let cmap = Cmap {
+            version: 0,
+            num_tables: 1,
+            records: vec![EncodingRecord { platform_id: 0, encoding_id: 5, subtable_offset: 0 }],
+            subtables: vec![
+                CmapSubtable::Format13 {
+                    language: 0,
+                    groups: vec![
+                        ConstantMapGroup { start_char_code: 0x30, end_char_code: 0x39, glyph_id: 50 },
+                    ],
+                },
+            ],
+        };
+        let mut w = Writer::new();
+        cmap.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Cmap::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.map_codepoint(0x30), Some(50));
+        assert_eq!(parsed.map_codepoint(0x35), Some(50));
+        assert_eq!(parsed.map_codepoint(0x39), Some(50));
+        assert_eq!(parsed.map_codepoint(0x2F), None);
+        assert_eq!(parsed.glyph_codepoints(50), vec![0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]);
+    }
+
+    #[test]
+    fn test_cmap_format14_roundtrip() {
+        use tables::cmap::{Cmap, CmapSubtable, EncodingRecord, VariationSelectorRecord, UnicodeRange, NonDefaultUvMapping};
+        let cmap = Cmap {
+            version: 0,
+            num_tables: 1,
+            records: vec![EncodingRecord { platform_id: 0, encoding_id: 5, subtable_offset: 0 }],
+            subtables: vec![
+                CmapSubtable::Format14 {
+                    records: vec![
+                        VariationSelectorRecord {
+                            var_selector: 0xFE00,
+                            default_uvs: vec![
+                                UnicodeRange { start_unicode_value: 0x0041, additional_count: 2 },
+                            ],
+                            non_default_uvs: vec![
+                                NonDefaultUvMapping { unicode_value: 0x0044, glyph_id: 99 },
+                            ],
+                        },
+                        VariationSelectorRecord {
+                            var_selector: 0xFE01,
+                            default_uvs: vec![],
+                            non_default_uvs: vec![
+                                NonDefaultUvMapping { unicode_value: 0x0045, glyph_id: 100 },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        let mut w = Writer::new();
+        cmap.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Cmap::parse(&bytes, 0).unwrap();
+        // Format 14 does not participate in single-codepoint mapping
+        assert_eq!(parsed.map_codepoint(0x0041), None);
+        assert_eq!(parsed.map_codepoint(0x0044), None);
+        // Verify parsed structure
+        if let CmapSubtable::Format14 { records } = &parsed.subtables[0] {
+            assert_eq!(records.len(), 2);
+            assert_eq!(records[0].var_selector, 0xFE00);
+            assert_eq!(records[0].default_uvs.len(), 1);
+            assert_eq!(records[0].default_uvs[0].start_unicode_value, 0x0041);
+            assert_eq!(records[0].default_uvs[0].additional_count, 2);
+            assert_eq!(records[0].non_default_uvs.len(), 1);
+            assert_eq!(records[0].non_default_uvs[0].glyph_id, 99);
+            assert_eq!(records[1].var_selector, 0xFE01);
+            assert_eq!(records[1].default_uvs.len(), 0);
+            assert_eq!(records[1].non_default_uvs.len(), 1);
+            assert_eq!(records[1].non_default_uvs[0].glyph_id, 100);
+        } else {
+            panic!("Expected Format14 subtable");
+        }
+    }
 }

@@ -19,7 +19,7 @@ impl Ttc {
         if tag != 0x74746366 {
             return Err(FontError::invalid_table(
                 crate::error::Tag::new(b"ttcf"),
-                &format!("Expected ttcTag 0x74746366, got 0x{:08X}", tag),
+                format!("Expected ttcTag 0x74746366, got 0x{:08X}", tag),
             ));
         }
         let version = p.u32()?;
@@ -47,14 +47,14 @@ impl Ttc {
         if index >= self.offsets.len() {
             return Err(FontError::invalid_table(
                 crate::error::Tag::new(b"ttcf"),
-                &format!("Font index {} out of range ({} fonts)", index, self.num_fonts),
+                format!("Font index {} out of range ({} fonts)", index, self.num_fonts),
             ));
         }
         let offset = self.offsets[index] as usize;
         Font::read(&buf[offset..])
     }
 
-    pub fn fonts<'a>(&self, buf: &'a [u8]) -> Vec<Result<Font, FontError>> {
+    pub fn fonts(&self, buf: &[u8]) -> Vec<Result<Font, FontError>> {
         self.offsets
             .iter()
             .map(|&off| Font::read(&buf[off as usize..]))

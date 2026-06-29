@@ -28,6 +28,20 @@
 - [x] TrueType Collection (`.ttc`) parsing
 - [x] CFF / CFF2 table parsing for PostScript-outline OTFs
 
+## Brainstorming
+
+- TTX-style XML dump / import for human-readable table inspection
+- Full GPOS / GSUB parsing (LookupList, ScriptList, FeatureList decomposition)
+- Full CFF / CFF2 CharString decoding and outline extraction
+- SVG table read/write for color fonts
+- COLR / CPAL table support for color glyph layers
+- Variable font instance generation (apply fvar + avar + gvar)
+- OpenType feature language (`.fea`) parser and compiler
+- OpenTypeSanitizer-style structural validation
+- Font hinting compiler / auto-hinter
+- AAT tables (morx, mort, etc.)
+- Better WOFF2 table transform support (glyf / loca transformed)
+
 ## Done
 
 - [x] Initialize Rust project
@@ -63,3 +77,4 @@
 - [x] WOFF2 read/write support (`to-woff2`, `from-woff2`)
 - [x] TrueType Collection (`.ttc`) parsing (`ttc-info`)
 - [x] CFF / CFF2 table basic parsing for PostScript-outline OTFs
+- [x] cmap format 6, 10, 13, 14 parsing and writing
