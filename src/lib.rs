@@ -934,6 +934,44 @@ mod tests {
     }
 
     #[test]
+    fn test_cmap_format6_even_length_with_format4() {
+        // Format6 with even-length array (4 entries -> length 18 -> padded to 20)
+        // followed by Format4 to verify next subtable offset is correct
+        use tables::cmap::{Cmap, CmapSubtable, EncodingRecord, Format4Segment};
+        let cmap = Cmap {
+            version: 0,
+            num_tables: 2,
+            records: vec![
+                EncodingRecord { platform_id: 0, encoding_id: 1, subtable_offset: 0 },
+                EncodingRecord { platform_id: 3, encoding_id: 1, subtable_offset: 0 },
+            ],
+            subtables: vec![
+                CmapSubtable::Format6 {
+                    language: 0,
+                    first_code: 0x30,
+                    glyph_id_array: vec![50, 51, 52, 53],
+                },
+                CmapSubtable::Format4 {
+                    language: 0,
+                    segments: vec![
+                        Format4Segment { end_code: 0x5A, start_code: 0x41, id_delta: 0, id_range_offset: 0 },
+                        Format4Segment { end_code: 0xFFFF, start_code: 0xFFFF, id_delta: 1, id_range_offset: 0 },
+                    ],
+                },
+            ],
+        };
+        let mut w = Writer::new();
+        cmap.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Cmap::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.subtables.len(), 2);
+        assert_eq!(parsed.map_codepoint(0x30), Some(50));
+        assert_eq!(parsed.map_codepoint(0x33), Some(53));
+        assert_eq!(parsed.map_codepoint(0x41), Some(0x41)); // Format4 segment maps 0x41 to 0x41 (id_delta=0)
+        assert_eq!(parsed.map_codepoint(0x5A), Some(0x5A));
+    }
+
+    #[test]
     fn test_cmap_format10_roundtrip() {
         use tables::cmap::{Cmap, CmapSubtable, EncodingRecord};
         let cmap = Cmap {
@@ -1038,5 +1076,140 @@ mod tests {
         } else {
             panic!("Expected Format14 subtable");
         }
+    }
+
+    #[test]
+    fn test_colr_roundtrip() {
+        use tables::colr::{Colr, BaseGlyphRecord, LayerRecord};
+        let colr = Colr {
+            version: 0,
+            base_glyphs: vec![
+                BaseGlyphRecord { glyph_id: 1, first_layer_index: 0, num_layers: 2 },
+            ],
+            layers: vec![
+                LayerRecord { glyph_id: 2, palette_index: 0 },
+                LayerRecord { glyph_id: 3, palette_index: 1 },
+            ],
+        };
+        let mut w = Writer::new();
+        colr.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Colr::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.base_glyphs.len(), 1);
+        assert_eq!(parsed.base_glyphs[0].glyph_id, 1);
+        assert_eq!(parsed.base_glyphs[0].num_layers, 2);
+        assert_eq!(parsed.layers.len(), 2);
+        assert_eq!(parsed.layers[0].palette_index, 0);
+        assert_eq!(parsed.layers[1].palette_index, 1);
+    }
+
+    #[test]
+    fn test_cpal_roundtrip() {
+        use tables::cpal::{Cpal, Palette, ColorRecord};
+        let cpal = Cpal {
+            version: 0,
+            num_palette_entries: 2,
+            palettes: vec![
+                Palette { color_indices: vec![0, 1] },
+                Palette { color_indices: vec![2, 3] },
+            ],
+            colors: vec![
+                ColorRecord { blue: 255, green: 0, red: 0, alpha: 255 },
+                ColorRecord { blue: 0, green: 255, red: 0, alpha: 255 },
+                ColorRecord { blue: 0, green: 0, red: 255, alpha: 255 },
+                ColorRecord { blue: 255, green: 255, red: 255, alpha: 128 },
+            ],
+        };
+        let mut w = Writer::new();
+        cpal.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Cpal::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.palettes.len(), 2);
+        assert_eq!(parsed.colors.len(), 4);
+        assert_eq!(parsed.colors[0].to_rgba(), (0, 0, 255, 255));
+        assert_eq!(parsed.colors[3].alpha, 128);
+    }
+
+    #[test]
+    fn test_svg_roundtrip() {
+        use tables::svg::{Svg, SvgDocumentRecord};
+        let svg = Svg {
+            version: 0,
+            entries: vec![
+                SvgDocumentRecord { start_glyph_id: 1, end_glyph_id: 1, svg_doc_offset: 0, svg_doc_length: 11 },
+                SvgDocumentRecord { start_glyph_id: 2, end_glyph_id: 3, svg_doc_offset: 11, svg_doc_length: 13 },
+            ],
+            documents: vec![
+                b"<svg></svg>".to_vec(),
+                b"<svg>a</svg>".to_vec(),
+            ],
+        };
+        let mut w = Writer::new();
+        svg.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Svg::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.entries.len(), 2);
+        assert_eq!(parsed.entries[0].start_glyph_id, 1);
+        assert_eq!(parsed.entries[1].end_glyph_id, 3);
+        assert_eq!(parsed.documents.len(), 2);
+        assert_eq!(parsed.documents[0], b"<svg></svg>");
+        assert_eq!(parsed.documents[1], b"<svg>a</svg>");
+    }
+
+    #[test]
+    fn test_svg_three_entries_sequential_docs() {
+        use tables::svg::{Svg, SvgDocumentRecord};
+        // Three entries each with their own document
+        let svg = Svg {
+            version: 0,
+            entries: vec![
+                SvgDocumentRecord { start_glyph_id: 1, end_glyph_id: 1, svg_doc_offset: 0, svg_doc_length: 5 },
+                SvgDocumentRecord { start_glyph_id: 2, end_glyph_id: 2, svg_doc_offset: 0, svg_doc_length: 6 },
+                SvgDocumentRecord { start_glyph_id: 3, end_glyph_id: 3, svg_doc_offset: 0, svg_doc_length: 5 },
+            ],
+            documents: vec![
+                b"hello".to_vec(),
+                b"world!".to_vec(),
+                b"hello".to_vec(),
+            ],
+        };
+        let mut w = Writer::new();
+        svg.write(&mut w).unwrap();
+        let bytes = w.into_vec();
+        let parsed = Svg::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.entries.len(), 3);
+        assert_eq!(parsed.documents.len(), 3);
+        assert_eq!(parsed.documents[0], b"hello");
+        assert_eq!(parsed.documents[1], b"world!");
+        assert_eq!(parsed.documents[2], b"hello");
+    }
+
+    #[test]
+    fn test_svg_parse_manual_offsets() {
+        use tables::svg::Svg;
+        // Manually construct an SVG table with 2 entries and verify parse
+        // Header: version=0, offsetToDocList=8 (padded header)
+        // Doc list at offset 8: numEntries=2
+        // Entry 1: start=1, end=1, offset=26, length=5
+        // Entry 2: start=2, end=2, offset=31, length=6
+        // Documents at offsets 8+26=34 and 8+31=39
+        let mut w = Writer::new();
+        w.write_u16(0); // version
+        w.write_u32(8); // offsetToDocList (with 2 bytes padding after header)
+        w.write_u16(0); // padding
+        // Doc list starts at offset 8
+        w.write_u16(2); // numEntries
+        w.write_u16(1); w.write_u16(1); w.write_u32(26); w.write_u32(5); // entry 1
+        w.write_u16(2); w.write_u16(2); w.write_u32(31); w.write_u32(6); // entry 2
+        // Document 1 at offset 8+26 = 34
+        w.write_bytes(b"hello");
+        // Document 2 at offset 8+31 = 39
+        w.write_bytes(b"world!");
+        let bytes = w.into_vec();
+        let parsed = Svg::parse(&bytes, 0).unwrap();
+        assert_eq!(parsed.entries.len(), 2);
+        assert_eq!(parsed.documents.len(), 2);
+        assert_eq!(parsed.documents[0], b"hello");
+        assert_eq!(parsed.documents[1], b"world!");
     }
 }

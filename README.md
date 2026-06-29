@@ -60,6 +60,9 @@ cargo build --release
 
 # List fonts in a TrueType Collection
 ./target/release/fonttype ttc-info MyCollection.ttc
+
+# Dump font as TTX-style XML
+./target/release/fonttype ttx MyFont.ttf
 ```
 
 ## Library Usage
@@ -127,6 +130,9 @@ if let Some(ref glyf) = font.glyf {
 | `fvar` | Yes | Yes |
 | `STAT` | Yes | Yes |
 | `CFF ` | Yes (header + INDEX) | Yes (passthrough) |
+| `COLR` | Yes (v0) | Yes |
+| `CPAL` | Yes (v0) | Yes |
+| `SVG ` | Yes (v0) | Yes |
 
 ## Formats
 

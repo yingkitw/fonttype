@@ -1,6 +1,6 @@
 use crate::error::{FontError, Tag};
 use crate::parse::Parser;
-use crate::tables::{Table, head::Head, hhea::Hhea, maxp::Maxp, post::Post, name::Name, cmap::Cmap, os2::Os2, glyf::GlyfTable, loca::LocaTable, hmtx::Hmtx, kern::Kern, gpos::Gpos, gsub::Gsub, var::{Hvar, Gvar}, fvar::Fvar, stat::Stat, cff::Cff};
+use crate::tables::{Table, head::Head, hhea::Hhea, maxp::Maxp, post::Post, name::Name, cmap::Cmap, os2::Os2, glyf::GlyfTable, loca::LocaTable, hmtx::Hmtx, kern::Kern, gpos::Gpos, gsub::Gsub, var::{Hvar, Gvar}, fvar::Fvar, stat::Stat, cff::Cff, colr::Colr, cpal::Cpal, svg::Svg};
 use crate::write::Writer;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +42,9 @@ pub struct Font {
     pub fvar: Option<Fvar>,
     pub stat: Option<Stat>,
     pub cff: Option<Cff>,
+    pub colr: Option<Colr>,
+    pub cpal: Option<Cpal>,
+    pub svg: Option<Svg>,
     pub raw_tables: Vec<(Tag, Vec<u8>)>,
 }
 
@@ -129,6 +132,15 @@ impl Font {
             let data = Parser::new(buf, rec.offset as usize).slice(rec.length as usize).ok()?;
             Cff::parse(data).ok()
         });
+        let colr = find(Colr::tag()).ok().and_then(|rec| {
+            Colr::parse(buf, rec.offset as usize).ok()
+        });
+        let cpal = find(Cpal::tag()).ok().and_then(|rec| {
+            Cpal::parse(buf, rec.offset as usize).ok()
+        });
+        let svg = find(Svg::tag()).ok().and_then(|rec| {
+            Svg::parse(buf, rec.offset as usize).ok()
+        });
 
         let mut glyf: Option<GlyfTable> = None;
         let mut loca: Option<LocaTable> = None;
@@ -177,6 +189,9 @@ impl Font {
             fvar,
             stat,
             cff,
+            colr,
+            cpal,
+            svg,
             raw_tables,
         })
     }
@@ -271,6 +286,21 @@ impl Font {
             let mut w = Writer::new();
             cff.write(&mut w)?;
             table_data.push((Cff::tag(), w.into_vec()));
+        }
+        if let Some(colr) = &self.colr {
+            let mut w = Writer::new();
+            colr.write(&mut w)?;
+            table_data.push((Colr::tag(), w.into_vec()));
+        }
+        if let Some(cpal) = &self.cpal {
+            let mut w = Writer::new();
+            cpal.write(&mut w)?;
+            table_data.push((Cpal::tag(), w.into_vec()));
+        }
+        if let Some(svg) = &self.svg {
+            let mut w = Writer::new();
+            svg.write(&mut w)?;
+            table_data.push((Svg::tag(), w.into_vec()));
         }
 
         if let Some(glyf) = &self.glyf {
@@ -534,6 +564,9 @@ impl Font {
             fvar: None,
             stat: None,
             cff: None,
+            colr: None,
+            cpal: None,
+            svg: None,
             raw_tables: vec![],
         }
     }
@@ -636,12 +669,15 @@ impl Font {
             }
         }
 
-        // GPOS/GSUB/fvar/stat/cff glyph IDs are invalidated by subsetting
+        // GPOS/GSUB/fvar/stat/cff/colr/cpal/svg glyph IDs are invalidated by subsetting
         new_font.gpos = None;
         new_font.gsub = None;
         new_font.fvar = None;
         new_font.stat = None;
         new_font.cff = None;
+        new_font.colr = None;
+        new_font.cpal = None;
+        new_font.svg = None;
 
         new_font
     }

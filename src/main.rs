@@ -41,6 +41,9 @@ enum Commands {
     /// Validate a font file
     Validate {
         font: PathBuf,
+        /// Print table directory before validation results
+        #[arg(long)]
+        show_table: bool,
     },
     /// Convert TTF/OTF to WOFF
     ToWoff {
@@ -61,6 +64,10 @@ enum Commands {
     /// List all tables in the font
     Tables {
         file: PathBuf,
+    },
+    /// Show table directory (alias for tables)
+    ShowTable {
+        font: PathBuf,
     },
     /// Query cmap mapping: codepoint → glyph ID or reverse
     Map {
@@ -127,6 +134,10 @@ enum Commands {
     TtcInfo {
         file: PathBuf,
     },
+    /// Dump font as simplified TTX-style XML
+    Ttx {
+        file: PathBuf,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -161,6 +172,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let axes: Vec<String> = stat.design_axes.iter().map(|a| a.axis_tag.to_string()).collect();
                 println!("  STAT axes: {}", axes.join(", "));
                 println!("  STAT axis values: {}", stat.axis_values.len());
+            }
+            if let Some(ref colr) = font.colr {
+                println!("  COLR base glyphs: {}", colr.base_glyphs.len());
+                println!("  COLR layers: {}", colr.layers.len());
+            }
+            if let Some(ref cpal) = font.cpal {
+                println!("  CPAL palettes: {}", cpal.palettes.len());
+                println!("  CPAL colors: {}", cpal.colors.len());
+            }
+            if let Some(ref svg) = font.svg {
+                println!("  SVG entries: {}", svg.entries.len());
+                for (i, rec) in svg.entries.iter().enumerate() {
+                    println!("    [{}] glyph {}-{} ({} bytes)", i, rec.start_glyph_id, rec.end_glyph_id, svg.documents.get(i).map(|d| d.len()).unwrap_or(0));
+                }
             }
         }
         Commands::Dump { file } => {
@@ -244,9 +269,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(&out, subset.write()?)?;
             println!("Subset {} -> {} (kept {} glyphs)", font.display(), out.display(), glyph_ids.len());
         }
-        Commands::Validate { font } => {
+        Commands::Validate { font, show_table } => {
             let bytes = std::fs::read(&font)?;
             let f = fonttype::Font::read(&bytes)?;
+            if show_table {
+                println!("{:<8} {:>10} {:>10} {:>10}", "Tag", "Offset", "Length", "Checksum");
+                for rec in &f.tables {
+                    println!("{:<8} {:>10} {:>10} {:>10}", rec.tag, rec.offset, rec.length, rec.checksum);
+                }
+            }
             let issues = f.validate(&bytes);
             if issues.is_empty() {
                 println!("{}: valid", font.display());
@@ -338,6 +369,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Tables { file } => {
             let bytes = std::fs::read(&file)?;
+            let font = fonttype::Font::read(&bytes)?;
+            println!("{:<8} {:>10} {:>10} {:>10}", "Tag", "Offset", "Length", "Checksum");
+            for rec in &font.tables {
+                println!("{:<8} {:>10} {:>10} {:>10}", rec.tag, rec.offset, rec.length, rec.checksum);
+            }
+        }
+        Commands::ShowTable { font } => {
+            let bytes = std::fs::read(&font)?;
             let font = fonttype::Font::read(&bytes)?;
             println!("{:<8} {:>10} {:>10} {:>10}", "Tag", "Offset", "Length", "Checksum");
             for rec in &font.tables {
@@ -786,6 +825,265 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        Commands::Ttx { file } => {
+            let bytes = std::fs::read(&file)?;
+            let font = fonttype::Font::read(&bytes)?;
+            println!("{}", font_to_ttx(&font));
+        }
     }
     Ok(())
+}
+
+fn font_to_ttx(font: &fonttype::Font) -> String {
+    let mut out = String::new();
+    out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    out.push_str("<ttFont sfntVersion=\"OTTO\">\n");
+
+    // Table directory
+    out.push_str("  <tableDirectory>\n");
+    for rec in &font.tables {
+        out.push_str(&format!(
+            "    <table tag=\"{}\" offset=\"{}\" length=\"{}\" checksum=\"0x{:08X}\"/>\n",
+            rec.tag, rec.offset, rec.length, rec.checksum
+        ));
+    }
+    out.push_str("  </tableDirectory>\n");
+
+    // head
+    out.push_str("  <head>\n");
+    out.push_str(&format!("    <version value=\"{}.{}\"/>\n", font.head.major_version, font.head.minor_version));
+    out.push_str(&format!("    <unitsPerEm value=\"{}\"/>\n", font.head.units_per_em));
+    out.push_str(&format!("    <xMin value=\"{}\"/>\n", font.head.x_min));
+    out.push_str(&format!("    <yMin value=\"{}\"/>\n", font.head.y_min));
+    out.push_str(&format!("    <xMax value=\"{}\"/>\n", font.head.x_max));
+    out.push_str(&format!("    <yMax value=\"{}\"/>\n", font.head.y_max));
+    out.push_str(&format!("    <macStyle value=\"{}\"/>\n", font.head.mac_style));
+    out.push_str(&format!("    <indexToLocFormat value=\"{}\"/>\n", font.head.index_to_loc_format));
+    out.push_str("  </head>\n");
+
+    // hhea
+    out.push_str("  <hhea>\n");
+    out.push_str(&format!("    <ascender value=\"{}\"/>\n", font.hhea.ascender));
+    out.push_str(&format!("    <descender value=\"{}\"/>\n", font.hhea.descender));
+    out.push_str(&format!("    <advanceWidthMax value=\"{}\"/>\n", font.hhea.advance_width_max));
+    out.push_str(&format!("    <numberOfHMetrics value=\"{}\"/>\n", font.hhea.number_of_hmetrics));
+    out.push_str("  </hhea>\n");
+
+    // maxp
+    out.push_str("  <maxp>\n");
+    out.push_str(&format!("    <numGlyphs value=\"{}\"/>\n", font.maxp.num_glyphs));
+    out.push_str("  </maxp>\n");
+
+    // post
+    out.push_str("  <post>\n");
+    out.push_str(&format!("    <formatType value=\"{}\"/>\n", font.post.version));
+    out.push_str(&format!("    <isFixedPitch value=\"{}\"/>\n", font.post.is_fixed_pitch));
+    out.push_str("  </post>\n");
+
+    // name
+    out.push_str("  <name>\n");
+    for nr in &font.name.records {
+        out.push_str(&format!(
+            "    <nameRecord platformID=\"{}\" encodingID=\"{}\" languageID=\"{}\" nameID=\"{}\">{}</nameRecord>\n",
+            nr.platform_id, nr.encoding_id, nr.language_id, nr.name_id,
+            xml_escape(&nr.string)
+        ));
+    }
+    out.push_str("  </name>\n");
+
+    // cmap
+    out.push_str("  <cmap>\n");
+    for (_i, sub) in font.cmap.subtables.iter().enumerate() {
+        match sub {
+            fonttype::tables::cmap::CmapSubtable::Format0 { language, .. } => {
+                out.push_str(&format!("    <cmapFormat0 platformID=\"{}\" platformEncodingID=\"{}\" language=\"{}\"/>\n", 0, 0, language));
+            }
+            fonttype::tables::cmap::CmapSubtable::Format4 { language, segments } => {
+                out.push_str(&format!("    <cmapFormat4 language=\"{}\">\n", language));
+                for seg in segments {
+                    out.push_str(&format!(
+                        "      <seg start=\"{}\" end=\"{}\" delta=\"{}\" rangeOffset=\"{}\"/>\n",
+                        seg.start_code, seg.end_code, seg.id_delta, seg.id_range_offset
+                    ));
+                }
+                out.push_str("    </cmapFormat4>\n");
+            }
+            fonttype::tables::cmap::CmapSubtable::Format12 { language, groups } => {
+                out.push_str(&format!("    <cmapFormat12 language=\"{}\">\n", language));
+                for g in groups {
+                    out.push_str(&format!(
+                        "      <map code=\"0x{:X}-0x{:X}\" gid=\"{}\"/>\n",
+                        g.start_char_code, g.end_char_code, g.start_glyph_id
+                    ));
+                }
+                out.push_str("    </cmapFormat12>\n");
+            }
+            fonttype::tables::cmap::CmapSubtable::Format6 { language, first_code, glyph_id_array } => {
+                out.push_str(&format!("    <cmapFormat6 language=\"{}\" firstCode=\"{}\">\n", language, first_code));
+                for (j, gid) in glyph_id_array.iter().enumerate() {
+                    out.push_str(&format!("      <map code=\"{}\" gid=\"{}\"/>\n", first_code + j as u16, gid));
+                }
+                out.push_str("    </cmapFormat6>\n");
+            }
+            fonttype::tables::cmap::CmapSubtable::Format10 { language, start_char_code, glyph_id_array } => {
+                out.push_str(&format!("    <cmapFormat10 language=\"{}\" startCode=\"{}\">\n", language, start_char_code));
+                for (j, gid) in glyph_id_array.iter().enumerate() {
+                    out.push_str(&format!("      <map code=\"{}\" gid=\"{}\"/>\n", start_char_code + j as u32, gid));
+                }
+                out.push_str("    </cmapFormat10>\n");
+            }
+            fonttype::tables::cmap::CmapSubtable::Format13 { language, groups } => {
+                out.push_str(&format!("    <cmapFormat13 language=\"{}\">\n", language));
+                for g in groups {
+                    out.push_str(&format!(
+                        "      <map code=\"0x{:X}-0x{:X}\" gid=\"{}\"/>\n",
+                        g.start_char_code, g.end_char_code, g.glyph_id
+                    ));
+                }
+                out.push_str("    </cmapFormat13>\n");
+            }
+            fonttype::tables::cmap::CmapSubtable::Format14 { records } => {
+                out.push_str("    <cmapFormat14>\n");
+                for rec in records {
+                    out.push_str(&format!("      <varSelector selector=\"0x{:X}\">\n", rec.var_selector));
+                    for r in &rec.default_uvs {
+                        out.push_str(&format!("        <defaultUVS start=\"0x{:X}\" count=\"{}\"/>\n", r.start_unicode_value, r.additional_count));
+                    }
+                    for m in &rec.non_default_uvs {
+                        out.push_str(&format!("        <nonDefaultUVS code=\"0x{:X}\" gid=\"{}\"/>\n", m.unicode_value, m.glyph_id));
+                    }
+                    out.push_str("      </varSelector>\n");
+                }
+                out.push_str("    </cmapFormat14>\n");
+            }
+        }
+    }
+    out.push_str("  </cmap>\n");
+
+    // OS/2
+    out.push_str(&format!("  <OS_2 version=\"{}\"/>\n", font.os2.version));
+
+    // glyf
+    if let Some(ref glyf) = font.glyf {
+        out.push_str("  <glyf>\n");
+        out.push_str(&format!("    <glyphCount value=\"{}\"/>\n", glyf.glyphs.len()));
+        out.push_str("  </glyf>\n");
+    }
+
+    // loca
+    if let Some(ref loca) = font.loca {
+        out.push_str("  <loca>\n");
+        out.push_str(&format!("    <entryCount value=\"{}\"/>\n", loca.offsets.len()));
+        out.push_str("  </loca>\n");
+    }
+
+    // hmtx
+    out.push_str("  <hmtx>\n");
+    out.push_str(&format!("    <hMetricCount value=\"{}\"/>\n", font.hmtx.h_metrics.len()));
+    out.push_str("  </hmtx>\n");
+
+    // kern
+    if let Some(ref kern) = font.kern {
+        out.push_str("  <kern>\n");
+        out.push_str(&format!("    <subtableCount value=\"{}\"/>\n", kern.subtables.len()));
+        for st in &kern.subtables {
+            out.push_str(&format!("    <kernSubtable coverage=\"{}\" pairs=\"{}\"/>\n", st.coverage, st.pairs.len()));
+        }
+        out.push_str("  </kern>\n");
+    }
+
+    // GPOS
+    if let Some(ref gpos) = font.gpos {
+        out.push_str("  <GPOS>\n");
+        out.push_str(&format!("    <kerningPairs value=\"{}\"/>\n", gpos.kerning.len()));
+        out.push_str("  </GPOS>\n");
+    }
+
+    // GSUB
+    if let Some(ref gsub) = font.gsub {
+        out.push_str("  <GSUB>\n");
+        out.push_str(&format!("    <features value=\"{}\"/>\n", gsub.features.join(", ")));
+        out.push_str(&format!("    <hasLigatures value=\"{}\"/>\n", gsub.has_ligatures()));
+        out.push_str("  </GSUB>\n");
+    }
+
+    // fvar
+    if let Some(ref fvar) = font.fvar {
+        out.push_str("  <fvar>\n");
+        for axis in &fvar.axes {
+            out.push_str(&format!(
+                "    <axis tag=\"{}\" min=\"{}\" default=\"{}\" max=\"{}\"/>\n",
+                axis.axis_tag, axis.min_value, axis.default_value, axis.max_value
+            ));
+        }
+        out.push_str("  </fvar>\n");
+    }
+
+    // STAT
+    if let Some(ref stat) = font.stat {
+        out.push_str("  <STAT>\n");
+        for axis in &stat.design_axes {
+            out.push_str(&format!("    <axis tag=\"{}\"/>\n", axis.axis_tag));
+        }
+        out.push_str("  </STAT>\n");
+    }
+
+    // CFF
+    if let Some(ref cff) = font.cff {
+        out.push_str("  <CFF>\n");
+        out.push_str(&format!("    <majorVersion value=\"{}\"/>\n", cff.major_version));
+        out.push_str(&format!("    <nameIndexCount value=\"{}\"/>\n", cff.name_index.len()));
+        out.push_str("  </CFF>\n");
+    }
+
+    // SVG
+    if let Some(ref svg) = font.svg {
+        out.push_str("  <SVG>\n");
+        out.push_str(&format!("    <entryCount value=\"{}\"/>\n", svg.entries.len()));
+        for (i, rec) in svg.entries.iter().enumerate() {
+            out.push_str(&format!(
+                "    <svgEntry glyphID=\"{}\" endGlyphID=\"{}\" length=\"{}\"/>\n",
+                rec.start_glyph_id,
+                rec.end_glyph_id,
+                svg.documents.get(i).map(|d| d.len()).unwrap_or(0)
+            ));
+        }
+        out.push_str("  </SVG>\n");
+    }
+
+    out.push_str("</ttFont>\n");
+    out
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ttx_output_contains_key_elements() {
+        let font = fonttype::Font::create_minimal();
+        let xml = font_to_ttx(&font);
+        assert!(xml.starts_with("<?xml"));
+        assert!(xml.contains("<ttFont"));
+        assert!(xml.contains("<tableDirectory>"));
+        assert!(xml.contains("<head>"));
+        assert!(xml.contains("<hhea>"));
+        assert!(xml.contains("<maxp>"));
+        assert!(xml.contains("<cmap>"));
+        assert!(xml.contains("</ttFont>"));
+    }
+
+    #[test]
+    fn test_xml_escape() {
+        assert_eq!(xml_escape("A & B"), "A &amp; B");
+        assert_eq!(xml_escape("<tag>"), "&lt;tag&gt;");
+        assert_eq!(xml_escape("quote\""), "quote&quot;");
+    }
 }

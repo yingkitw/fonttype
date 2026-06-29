@@ -19,6 +19,9 @@ pub mod var;
 pub mod fvar;
 pub mod stat;
 pub mod cff;
+pub mod colr;
+pub mod cpal;
+pub mod svg;
 
 pub trait Table: Sized {
     fn tag() -> Tag;

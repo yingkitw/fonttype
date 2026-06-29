@@ -30,11 +30,8 @@
 
 ## Brainstorming
 
-- TTX-style XML dump / import for human-readable table inspection
 - Full GPOS / GSUB parsing (LookupList, ScriptList, FeatureList decomposition)
 - Full CFF / CFF2 CharString decoding and outline extraction
-- SVG table read/write for color fonts
-- COLR / CPAL table support for color glyph layers
 - Variable font instance generation (apply fvar + avar + gvar)
 - OpenType feature language (`.fea`) parser and compiler
 - Font hinting compiler / auto-hinter
@@ -78,3 +75,6 @@
 - [x] CFF / CFF2 table basic parsing for PostScript-outline OTFs
 - [x] cmap format 6, 10, 13, 14 parsing and writing
 - [x] OpenTypeSanitizer-style structural validation (overlap, directory sort, head checks, hhea consistency, glyf/loca co-presence)
+- [x] `ttx` command — TTX-style XML dump for human-readable font inspection
+- [x] COLR v0 and CPAL table parsing and writing for color fonts
+- [x] SVG table parsing and writing for color glyph artwork

@@ -40,6 +40,9 @@
 - `fvar` — variable font design axes
 - `STAT` — style attributes for variable fonts
 - `CFF ` — PostScript outlines (header + INDEX parsing, passthrough write)
+- `COLR` — color glyph layers (v0)
+- `CPAL` — color palettes (v0)
+- `SVG ` — SVG glyph artwork (v0)
 
 ## CLI Commands
 
@@ -67,6 +70,7 @@ fonttype compare <font_a> <font_b>              Structural diff between fonts
 fonttype to-woff2 <font> <out>                  Convert to WOFF2
 fonttype from-woff2 <font> <out>                Convert from WOFF2
 fonttype ttc-info <file>                        List fonts in a TrueType Collection
+fonttype ttx <file>                             Dump font as TTX-style XML
 ```
 
 ## Library API
