@@ -35,11 +35,11 @@
 - `hmtx` — horizontal metrics
 - `kern` — kerning (format 0)
 - `GPOS` — kerning pairs
-- `GSUB` — feature tags and ligature detection
+- `GSUB` — ScriptList, FeatureList, LookupList decomposition with Coverage and subtable parsing (Single, Multiple, Alternate, Ligature)
 - `HVAR` / `gvar` — variable font tables (header + passthrough)
 - `fvar` — variable font design axes
 - `STAT` — style attributes for variable fonts
-- `CFF ` — PostScript outlines (header + INDEX parsing, passthrough write)
+- `CFF ` — PostScript outlines (header + INDEX parsing, CharString decoding to path commands, passthrough write)
 - `COLR` — color glyph layers (v0)
 - `CPAL` — color palettes (v0)
 - `SVG ` — SVG glyph artwork (v0)

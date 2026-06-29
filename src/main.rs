@@ -161,8 +161,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  GPOS kerning pairs: {}", gpos.kerning.len());
             }
             if let Some(ref gsub) = font.gsub {
-                println!("  GSUB features: {}", gsub.features.join(", "));
+                let tags: Vec<String> = gsub.features.iter().map(|f| f.feature_tag.clone()).collect();
+                println!("  GSUB features: {}", tags.join(", "));
                 println!("  Has ligatures: {}", gsub.has_ligatures());
+                println!("  GSUB lookups: {}", gsub.lookups.len());
+                println!("  GSUB scripts: {}", gsub.scripts.len());
             }
             if let Some(ref fvar) = font.fvar {
                 let axes: Vec<String> = fvar.axes.iter().map(|a| format!("{} ({:.0}-{:.0})", a.axis_tag, a.min_value, a.max_value)).collect();
@@ -1002,8 +1005,11 @@ fn font_to_ttx(font: &fonttype::Font) -> String {
     // GSUB
     if let Some(ref gsub) = font.gsub {
         out.push_str("  <GSUB>\n");
-        out.push_str(&format!("    <features value=\"{}\"/>\n", gsub.features.join(", ")));
+        let tags: Vec<String> = gsub.features.iter().map(|f| f.feature_tag.clone()).collect();
+        out.push_str(&format!("    <features value=\"{}\"/>\n", tags.join(", ")));
         out.push_str(&format!("    <hasLigatures value=\"{}\"/>\n", gsub.has_ligatures()));
+        out.push_str(&format!("    <lookupCount value=\"{}\"/>\n", gsub.lookups.len()));
+        out.push_str(&format!("    <scriptCount value=\"{}\"/>\n", gsub.scripts.len()));
         out.push_str("  </GSUB>\n");
     }
 

@@ -22,7 +22,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  GPOS pairs:  {}", gpos.kerning.len());
     }
     if let Some(ref gsub) = font.gsub {
-        println!("  GSUB features: {}", gsub.features.join(", "));
+        let tags: Vec<String> = gsub.features.iter().map(|f| f.feature_tag.clone()).collect();
+        println!("  GSUB features: {}", tags.join(", "));
         println!("  Has ligatures: {}", gsub.has_ligatures());
     }
     if let Some(ref fvar) = font.fvar {

@@ -30,8 +30,7 @@
 
 ## Brainstorming
 
-- Full GPOS / GSUB parsing (LookupList, ScriptList, FeatureList decomposition)
-- Full CFF / CFF2 CharString decoding and outline extraction
+- Full GPOS parsing (LookupList, ScriptList, FeatureList decomposition)
 - Variable font instance generation (apply fvar + avar + gvar)
 - OpenType feature language (`.fea`) parser and compiler
 - Font hinting compiler / auto-hinter
@@ -78,3 +77,5 @@
 - [x] `ttx` command — TTX-style XML dump for human-readable font inspection
 - [x] COLR v0 and CPAL table parsing and writing for color fonts
 - [x] SVG table parsing and writing for color glyph artwork
+- [x] CFF Type 2 CharString decoder — extract glyph outlines as path commands
+- [x] Full GSUB parsing — ScriptList, FeatureList, LookupList with Coverage and subtable decomposition (Single, Multiple, Alternate, Ligature)

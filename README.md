@@ -124,12 +124,12 @@ if let Some(ref glyf) = font.glyf {
 | `hmtx` | Yes | Yes |
 | `kern` | Yes (format 0) | Yes (format 0) |
 | `GPOS` | Yes (kerning pairs) | Yes |
-| `GSUB` | Yes (features, ligatures) | Yes |
+| `GSUB` | Yes (ScriptList, FeatureList, LookupList, subtables) | Yes |
 | `HVAR` | Yes (header) | Yes (passthrough) |
 | `gvar` | Yes (header) | Yes (passthrough) |
 | `fvar` | Yes | Yes |
 | `STAT` | Yes | Yes |
-| `CFF ` | Yes (header + INDEX) | Yes (passthrough) |
+| `CFF ` | Yes (header + INDEX + CharString decode) | Yes (passthrough) |
 | `COLR` | Yes (v0) | Yes |
 | `CPAL` | Yes (v0) | Yes |
 | `SVG ` | Yes (v0) | Yes |

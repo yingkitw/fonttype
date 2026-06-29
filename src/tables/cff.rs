@@ -3,6 +3,9 @@ use crate::parse::Parser;
 use crate::tables::Table;
 use crate::write::Writer;
 
+#[path = "cff_charstring.rs"]
+pub mod cff_charstring;
+
 /// CFF / CFF2 table — PostScript outlines.
 /// For round-trip fidelity the full raw bytes are preserved.
 /// Top-level INDEXes and the Top DICT are parsed for inspection.
@@ -15,6 +18,8 @@ pub struct Cff {
     pub off_size: u8,
     pub name_index: Vec<String>,
     pub top_dict: Vec<TopDictEntry>,
+    pub charstrings_index: Vec<Vec<u8>>,
+    pub global_subr_index: Vec<Vec<u8>>,
     pub raw: Vec<u8>,
 }
 
@@ -42,6 +47,8 @@ impl Cff {
 
         let mut name_index = Vec::new();
         let mut top_dict = Vec::new();
+        let mut charstrings_index = Vec::new();
+        let mut global_subr_index = Vec::new();
 
         if !is_cff2 {
             // CFF 1.0: Name INDEX follows header
@@ -53,6 +60,20 @@ impl Cff {
                 if let Ok(dict_data) = parse_index(data, top_idx_offset) {
                     if let Some(td) = dict_data.into_iter().next() {
                         top_dict = parse_dict(&td);
+                    }
+                }
+                // String INDEX follows Top DICT INDEX
+                let string_idx_offset = index_end(data, top_idx_offset);
+                // Global Subr INDEX follows String INDEX
+                let gsubr_idx_offset = index_end(data, string_idx_offset);
+                if let Ok(gsubrs) = parse_index(data, gsubr_idx_offset) {
+                    global_subr_index = gsubrs.into_iter().map(|b| b.to_vec()).collect();
+                }
+                // CharStrings INDEX from Top DICT operator 17
+                if let Some(offset) = top_dict_int(&top_dict, 17) {
+                    let cs_offset = offset as usize;
+                    if let Ok(cs_entries) = parse_index(data, cs_offset) {
+                        charstrings_index = cs_entries.into_iter().map(|b| b.to_vec()).collect();
                     }
                 }
             }
@@ -70,9 +91,30 @@ impl Cff {
             off_size,
             name_index,
             top_dict,
+            charstrings_index,
+            global_subr_index,
             raw,
         })
     }
+
+    /// Decode the glyph outline at the given index in the CharStrings INDEX.
+    pub fn decode_glyph(&self, glyph_index: usize) -> Result<cff_charstring::GlyphOutline, String> {
+        let cs = self.charstrings_index.get(glyph_index)
+            .ok_or_else(|| format!("Glyph index {} out of range ({} charstrings)", glyph_index, self.charstrings_index.len()))?;
+        cff_charstring::decode_charstring(cs, &self.global_subr_index, &[])
+    }
+}
+
+/// Extract the first integer operand for a given operator from the Top DICT.
+fn top_dict_int(entries: &[TopDictEntry], operator: u16) -> Option<i32> {
+    for entry in entries {
+        if entry.operator == operator {
+            if let Some(DictOperand::Integer(v)) = entry.operands.first() {
+                return Some(*v);
+            }
+        }
+    }
+    None
 }
 
 impl Table for Cff {

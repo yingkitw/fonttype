@@ -285,23 +285,70 @@ mod tests {
     #[test]
     fn test_gsub_parse_features() {
         use tables::gsub::Gsub;
-        // GSUB header v1.0 with feature list at offset 10
+        // GSUB header v1.0: scriptList at 10, featureList at 12, lookupList at 10 (shared empty)
         let mut data = vec![
             0x00, 0x01, // majorVersion 1
             0x00, 0x00, // minorVersion 0
             0x00, 0x0A, // scriptListOffset 10
-            0x00, 0x0A, // featureListOffset 10
+            0x00, 0x0C, // featureListOffset 12
             0x00, 0x0A, // lookupListOffset 10
         ];
-        // FeatureList at offset 10
+        // Offset 10: empty ScriptList + empty LookupList (both count=0, 2 bytes)
+        data.extend_from_slice(&[
+            0x00, 0x00, // count 0
+        ]);
+        // Offset 12: FeatureList (22 bytes total)
+        // Offset 0-1: count=2, 2-7: liga record, 8-13: calt record
+        // 14-17: liga feature, 18-21: calt feature
         data.extend_from_slice(&[
             0x00, 0x02, // featureCount 2
-            b'l', b'i', b'g', b'a', 0x00, 0x08, // featureRecord "liga" offset 8
-            b'c', b'a', b'l', b't', 0x00, 0x10, // featureRecord "calt" offset 16
+            b'l', b'i', b'g', b'a', 0x00, 0x0E, // featureRecord "liga" offset 14
+            b'c', b'a', b'l', b't', 0x00, 0x12, // featureRecord "calt" offset 18
+            0x00, 0x00, 0x00, 0x00, // liga feature: params=0, lookupCount=0
+            0x00, 0x00, 0x00, 0x00, // calt feature: params=0, lookupCount=0
         ]);
         let gsub = Gsub::parse(&data).unwrap();
-        assert_eq!(gsub.features, vec!["liga", "calt"]);
+        let tags: Vec<String> = gsub.features.iter().map(|f| f.feature_tag.clone()).collect();
+        assert_eq!(tags, vec!["liga", "calt"]);
         assert!(gsub.has_ligatures());
+    }
+
+    #[test]
+    fn test_gsub_script_list() {
+        use tables::gsub::Gsub;
+        // GSUB with ScriptList containing DFLT/default
+        let mut data = vec![
+            0x00, 0x01, // majorVersion 1
+            0x00, 0x00, // minorVersion 0
+            0x00, 0x0A, // scriptListOffset 10
+            0x00, 0x1C, // featureListOffset 28
+            0x00, 0x0A, // lookupListOffset 10
+        ];
+        // Offset 10: ScriptList (12 bytes)
+        data.extend_from_slice(&[
+            0x00, 0x01, // scriptCount 1
+            b'D', b'F', b'L', b'T', 0x00, 0x08, // scriptRecord "DFLT" offset 8
+            // Script "DFLT" at ScriptList+8 = offset 18
+            0x00, 0x04, // defaultLangSysOffset 4
+            0x00, 0x00, // langSysCount 0
+            // LangSys at offset 22
+            0x00, 0x00, // lookupOrder 0
+            0xFF, 0xFF, // requiredFeatureIndex 0xFFFF
+            0x00, 0x01, // featureIndexCount 1
+            0x00, 0x00, // featureIndex 0
+        ]);
+        // Offset 28: FeatureList
+        data.extend_from_slice(&[
+            0x00, 0x01, // featureCount 1
+            b'l', b'i', b'g', b'a', 0x00, 0x08, // featureRecord offset 8
+            0x00, 0x00, 0x00, 0x00, // liga feature
+        ]);
+        let gsub = Gsub::parse(&data).unwrap();
+        assert_eq!(gsub.scripts.len(), 1);
+        assert_eq!(gsub.scripts[0].script_tag, "DFLT");
+        assert!(gsub.scripts[0].default_lang_sys.is_some());
+        let ls = gsub.scripts[0].default_lang_sys.as_ref().unwrap();
+        assert_eq!(ls.lookup_indices, vec![0]);
     }
 
     #[test]
