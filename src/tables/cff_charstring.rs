@@ -36,9 +36,9 @@ fn decode_stream(data: &[u8], state: &mut CharStringState, depth: usize) -> Resu
 
         // Type 2 CharString operators: 1-12, 14, 18-27, 29-31
         // 28 = shortint, 30 = real number (special number encodings)
-        let is_operator = (b0 >= 1 && b0 <= 12)
+        let is_operator = (1..=12).contains(&b0)
             || b0 == 14
-            || (b0 >= 18 && b0 <= 27)
+            || (18..=27).contains(&b0)
             || b0 == 29
             || b0 == 30
             || b0 == 31;
@@ -83,17 +83,17 @@ fn decode_stream(data: &[u8], state: &mut CharStringState, depth: usize) -> Resu
             i += 1;
             // Push a placeholder; real numbers in charstrings are rare for outlines
             state.stack.push(0.0);
-        } else if b0 >= 32 && b0 <= 246 {
+        } else if (32..=246).contains(&b0) {
             state.stack.push((b0 as i32 - 139) as f64);
             i += 1;
-        } else if b0 >= 247 && b0 <= 250 {
+        } else if (247..=250).contains(&b0) {
             if i + 1 >= data.len() {
                 return Err("Unexpected end of CharString".to_string());
             }
             let val = ((b0 as i32 - 247) * 256) + data[i + 1] as i32 + 108;
             state.stack.push(val as f64);
             i += 2;
-        } else if b0 >= 251 && b0 <= 254 {
+        } else if (251..=254).contains(&b0) {
             if i + 1 >= data.len() {
                 return Err("Unexpected end of CharString".to_string());
             }
@@ -162,7 +162,7 @@ fn execute_operator(op: u16, state: &mut CharStringState, _data: &[u8], _i: &mut
         4 => {
             // vmoveto
             state.maybe_extract_width(1);
-            if state.stack.len() >= 1 {
+            if !state.stack.is_empty() {
                 let dy = state.stack.pop().unwrap();
                 state.y += dy;
                 state.commands.push(PathCommand::MoveTo { x: state.x, y: state.y });
@@ -252,7 +252,7 @@ fn execute_operator(op: u16, state: &mut CharStringState, _data: &[u8], _i: &mut
         22 => {
             // hmoveto
             state.maybe_extract_width(1);
-            if state.stack.len() >= 1 {
+            if !state.stack.is_empty() {
                 let dx = state.stack.pop().unwrap();
                 state.x += dx;
                 state.commands.push(PathCommand::MoveTo { x: state.x, y: state.y });

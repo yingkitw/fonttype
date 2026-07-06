@@ -35,7 +35,7 @@ pub fn read_woff2(buf: &[u8]) -> Result<Vec<(Tag, Vec<u8>)>, FontError> {
     if signature != 0x774F4632 {
         return Err(FontError::invalid_table(
             Tag::new(b"wOF2"),
-            &format!("Expected WOFF2 signature 0x774F4632, got 0x{:08X}", signature),
+            format!("Expected WOFF2 signature 0x774F4632, got 0x{:08X}", signature),
         ));
     }
     let _flavor = p.u32()?;
@@ -59,7 +59,7 @@ pub fn read_woff2(buf: &[u8]) -> Result<Vec<(Tag, Vec<u8>)>, FontError> {
     {
         let mut decoder = brotli::Decompressor::new(compressed_data, 4096);
         decoder.read_to_end(&mut decompressed).map_err(|e| {
-            FontError::invalid_table(Tag::new(b"wOF2"), &format!("Brotli decompression failed: {}", e))
+            FontError::invalid_table(Tag::new(b"wOF2"), format!("Brotli decompression failed: {}", e))
         })?;
     }
 
@@ -72,8 +72,7 @@ pub fn read_woff2(buf: &[u8]) -> Result<Vec<(Tag, Vec<u8>)>, FontError> {
         let has_transform = (flags >> 6) & 0x01 != 0;
 
         let tag = if table_type == 0x3F {
-            let t = dp.tag()?;
-            t
+            dp.tag()?
         } else {
             let known = [
                 b"cmap", b"head", b"hhea", b"hmtx", b"maxp", b"name", b"OS/2",
@@ -126,7 +125,7 @@ pub fn read_woff2(buf: &[u8]) -> Result<Vec<(Tag, Vec<u8>)>, FontError> {
     // Reconstruct sfnt table list
     let mut result = Vec::with_capacity(tables.len());
     for (i, t) in tables.iter().enumerate() {
-        result.push((t.tag.clone(), table_data[i].clone()));
+        result.push((t.tag, table_data[i].clone()));
     }
     Ok(result)
 }
@@ -188,7 +187,7 @@ pub fn write_woff2(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
     {
         let mut encoder = brotli::CompressorWriter::new(&mut compressed, 4096, 4, 22);
         encoder.write_all(&uncompressed).map_err(|e| {
-            FontError::invalid_table(Tag::new(b"wOF2"), &format!("Brotli compression failed: {}", e))
+            FontError::invalid_table(Tag::new(b"wOF2"), format!("Brotli compression failed: {}", e))
         })?;
     }
 

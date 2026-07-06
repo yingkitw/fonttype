@@ -18,7 +18,12 @@ pub struct EncodingRecord {
     pub subtable_offset: u32,
 }
 
+// cmap format 0 is defined as an inline 256-byte glyphIdArray; keeping it as a
+// fixed array mirrors the spec and avoids a heap allocation. The resulting enum
+// size is dominated by this variant, which is acceptable since subtables are
+// stored in a Vec (heap) rather than passed by value on the stack.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CmapSubtable {
     Format0 {
         language: u16,
@@ -129,12 +134,11 @@ impl CmapSubtable {
                 }
                 let cp = codepoint as u16;
                 for seg in segments {
-                    if cp >= seg.start_code && cp <= seg.end_code {
-                        if seg.id_range_offset == 0 {
+                    if cp >= seg.start_code && cp <= seg.end_code
+                        && seg.id_range_offset == 0 {
                             return Some((cp as i32 + seg.id_delta as i32) as u16);
                         }
                         // idRangeOffset path omitted for brevity
-                    }
                 }
                 None
             }
@@ -271,8 +275,8 @@ impl Table for Cmap {
                     let _length = sp.u16()?;
                     let language = sp.u16()?;
                     let mut glyph_id_array = [0u8; 256];
-                    for i in 0..256 {
-                        glyph_id_array[i] = sp.u8()?;
+                    for slot in glyph_id_array.iter_mut() {
+                        *slot = sp.u8()?;
                     }
                     subtables.push(CmapSubtable::Format0 {
                         language,

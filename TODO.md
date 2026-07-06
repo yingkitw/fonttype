@@ -28,6 +28,12 @@
 - [x] TrueType Collection (`.ttc`) parsing
 - [x] CFF / CFF2 table parsing for PostScript-outline OTFs
 
+### Phase 5 — Merged from `ttf-rs`
+- [x] `bezier.rs` — BezierEditor (quad↔cubic conversion, path simplify/length, grid snapping) via `kurbo`
+- [x] `encoding.rs` — EncodingManager for Unicode / ASCII / Latin-1 / Windows-1252 / Mac Roman
+- [x] `modifier.rs` — chainable `FontModifier` builder for names, metrics, version, advance widths
+- [x] `validation.rs` — structured `ValidationReport` (`IssueSeverity` / `IssueCategory`); `Font::validate` now delegates to `validate_report`
+
 ## Brainstorming
 
 - Full GPOS parsing (LookupList, ScriptList, FeatureList decomposition)

@@ -54,7 +54,7 @@ pub fn read_woff(buf: &[u8]) -> Result<Vec<u8>, FontError> {
     for rec in &records {
         total_size += rec.orig_length;
         // 4-byte padding
-        while total_size % 4 != 0 {
+        while !total_size.is_multiple_of(4) {
             total_size += 1;
         }
     }
@@ -74,7 +74,7 @@ pub fn read_woff(buf: &[u8]) -> Result<Vec<u8>, FontError> {
     for rec in &records {
         sfnt_records.push((rec.tag, current_offset, rec.orig_length, rec.orig_checksum));
         current_offset += rec.orig_length;
-        while current_offset % 4 != 0 {
+        while !current_offset.is_multiple_of(4) {
             current_offset += 1;
         }
     }
@@ -97,7 +97,7 @@ pub fn read_woff(buf: &[u8]) -> Result<Vec<u8>, FontError> {
         let decompressed = if rec.comp_length != rec.orig_length {
             let mut decoder = ZlibDecoder::new(data);
             let mut out = Vec::with_capacity(rec.orig_length as usize);
-            decoder.read_to_end(&mut out).map_err(|e| FontError::Io(e))?;
+            decoder.read_to_end(&mut out).map_err(FontError::Io)?;
             out
         } else {
             data.to_vec()
@@ -123,8 +123,8 @@ pub fn write_woff(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
     let mut compressed: Vec<(Tag, Vec<u8>, u32, u32)> = Vec::with_capacity(tables.len());
     for (tag, data) in tables {
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data).map_err(|e| FontError::Io(e))?;
-        let comp = encoder.finish().map_err(|e| FontError::Io(e))?;
+        encoder.write_all(data).map_err(FontError::Io)?;
+        let comp = encoder.finish().map_err(FontError::Io)?;
         let orig_checksum = calc_checksum(data);
         compressed.push((*tag, comp, data.len() as u32, orig_checksum));
     }
@@ -161,7 +161,7 @@ pub fn write_woff(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
         woff.write_u32(*orig_len);
         woff.write_u32(*checksum);
         table_offset += comp.len() as u32;
-        while table_offset % 4 != 0 {
+        while !table_offset.is_multiple_of(4) {
             table_offset += 1;
         }
     }
@@ -173,7 +173,7 @@ pub fn write_woff(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
             woff.write_u8(0);
         }
         woff.write_bytes(comp);
-        while woff.len() % 4 != 0 {
+        while !woff.len().is_multiple_of(4) {
             woff.write_u8(0);
         }
     }
@@ -189,7 +189,7 @@ pub fn write_woff(tables: &[(Tag, Vec<u8>)]) -> Result<Vec<u8>, FontError> {
     let mut total_sfnt = header_size;
     for (_, _, orig_len, _) in &compressed {
         total_sfnt += orig_len;
-        while total_sfnt % 4 != 0 {
+        while !total_sfnt.is_multiple_of(4) {
             total_sfnt += 1;
         }
     }
@@ -202,7 +202,7 @@ fn calc_checksum(data: &[u8]) -> u32 {
     let mut sum: u32 = 0;
     let mut i = 0;
     let mut padded = data.to_vec();
-    while padded.len() % 4 != 0 {
+    while !padded.len().is_multiple_of(4) {
         padded.push(0);
     }
     while i + 4 <= padded.len() {

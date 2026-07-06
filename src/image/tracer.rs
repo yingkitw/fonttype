@@ -22,14 +22,13 @@ pub fn trace_image(img: &GrayImage, threshold: u8) -> Vec<Vec<(i16, i16)>> {
     // Simple boundary following: find top-left pixel of each region
     for y in 0..height {
         for x in 0..width {
-            if is_inside(x, y) && !visited[y as usize][x as usize] {
-                if !is_inside(x, y - 1) || y == 0 {
+            if is_inside(x, y) && !visited[y as usize][x as usize]
+                && (!is_inside(x, y - 1) || y == 0) {
                     // Start of a new contour
                     if let Some(contour) = follow_boundary(x, y, is_inside, &mut visited) {
                         contours.push(contour);
                     }
                 }
-            }
         }
     }
 
@@ -42,7 +41,7 @@ pub fn trace_image(img: &GrayImage, threshold: u8) -> Vec<Vec<(i16, i16)>> {
     contours.into_iter().map(simplify_contour).filter(|c| !c.is_empty()).collect()
 }
 
-fn follow_boundary<F>(start_x: i16, start_y: i16, is_inside: F, visited: &mut Vec<Vec<bool>>) -> Option<Vec<(i16, i16)>>
+fn follow_boundary<F>(start_x: i16, start_y: i16, is_inside: F, visited: &mut [Vec<bool>]) -> Option<Vec<(i16, i16)>>
 where
     F: Fn(i16, i16) -> bool,
 {

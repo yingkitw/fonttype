@@ -145,8 +145,8 @@ impl Font {
         let mut glyf: Option<GlyfTable> = None;
         let mut loca: Option<LocaTable> = None;
 
-        if let Ok(glyf_rec) = find(GlyfTable::tag()) {
-            if let Ok(loca_rec) = find(LocaTable::tag()) {
+        if let Ok(glyf_rec) = find(GlyfTable::tag())
+            && let Ok(loca_rec) = find(LocaTable::tag()) {
                 let num_glyphs = maxp.num_glyphs as usize;
                 let long_format = head.index_to_loc_format == 1;
                 loca = Some(parse_loca(buf, loca_rec.offset as usize, num_glyphs, long_format)?);
@@ -154,14 +154,13 @@ impl Font {
                     glyf = Some(GlyfTable::parse(buf, loca_table, glyf_rec.offset as usize)?);
                 }
             }
-        }
 
         let mut raw_tables = Vec::new();
         for rec in &tables {
             let known = [Head::tag(), Hhea::tag(), Maxp::tag(), Post::tag(), Name::tag(), Cmap::tag(), Os2::tag(), GlyfTable::tag(), LocaTable::tag(), Hmtx::tag(), Kern::tag(), Tag::new(b"cvt "), Tag::new(b"prep"), Tag::new(b"fpgm"), Gpos::tag(), Gsub::tag(), Hvar::tag(), Gvar::tag(), Fvar::tag(), Stat::tag(), Cff::tag()];
             if !known.contains(&rec.tag) {
                 let data = Parser::new(buf, rec.offset as usize).slice(rec.length as usize)?;
-                raw_tables.push((rec.tag.clone(), data.to_vec()));
+                raw_tables.push((rec.tag, data.to_vec()));
             }
         }
 
@@ -331,7 +330,7 @@ impl Font {
         }
 
         // Sort by tag for deterministic output
-        table_data.sort_by(|a, b| a.0 .0.cmp(&b.0 .0));
+        table_data.sort_by_key(|a| a.0 .0);
 
         let num_tables = table_data.len() as u16;
         let search_range = 1u16 << (num_tables as u32).ilog2();
@@ -344,7 +343,7 @@ impl Font {
         for (tag, data) in &table_data {
             let checksum = calc_checksum(data);
             records.push(TableRecord {
-                tag: tag.clone(),
+                tag: *tag,
                 checksum,
                 offset,
                 length: data.len() as u32,
@@ -682,143 +681,14 @@ impl Font {
         new_font
     }
 
-    /// Verify table checksums and basic structural consistency.
+    /// Verify table checksums and basic structural consistency, returning the
+    /// findings as human-readable strings. For programmatic inspection, use
+    /// [`Font::validate_report`](crate::Font::validate_report).
     pub fn validate(&self, buf: &[u8]) -> Vec<String> {
-        let mut issues = Vec::new();
-
-        // Check required tables
-        let required = [
-            Head::tag(), Hhea::tag(), Maxp::tag(), Name::tag(), Cmap::tag(),
-            Os2::tag(), Hmtx::tag(),
-        ];
-        for tag in &required {
-            if !self.tables.iter().any(|t| t.tag == *tag) {
-                issues.push(format!("Missing required table: {}", tag));
-            }
-        }
-
-        // Verify numGlyphs consistency
-        let glyf_count = self.glyf.as_ref().map(|g| g.glyphs.len()).unwrap_or(0);
-        if self.maxp.num_glyphs as usize != glyf_count {
-            issues.push(format!(
-                "maxp.numGlyphs ({}) != glyf glyph count ({})",
-                self.maxp.num_glyphs, glyf_count
-            ));
-        }
-        if let Some(ref loca) = self.loca {
-            if loca.offsets.len().saturating_sub(1) != glyf_count {
-                issues.push(format!(
-                    "loca entry count ({}) != glyf glyph count ({})",
-                    loca.offsets.len().saturating_sub(1), glyf_count
-                ));
-            }
-        }
-        let hmtx_count = self.hmtx.h_metrics.len() + self.hmtx.left_side_bearings.len();
-        if hmtx_count != glyf_count {
-            issues.push(format!(
-                "hmtx entry count ({}) != glyph count ({})",
-                hmtx_count, glyf_count
-            ));
-        }
-
-        // Table overlap detection
-        for i in 0..self.tables.len() {
-            for j in (i + 1)..self.tables.len() {
-                let a = &self.tables[i];
-                let b = &self.tables[j];
-                let a_start = a.offset;
-                let a_end = a.offset + a.length;
-                let b_start = b.offset;
-                let b_end = b.offset + b.length;
-                if a_start < b_end && b_start < a_end {
-                    issues.push(format!(
-                        "Tables {} and {} overlap ({}..{} vs {}..{})",
-                        a.tag, b.tag, a_start, a_end, b_start, b_end
-                    ));
-                }
-            }
-        }
-
-        // Table directory should be sorted by tag
-        for i in 1..self.tables.len() {
-            if self.tables[i - 1].tag.0 > self.tables[i].tag.0 {
-                issues.push(format!(
-                    "Table directory not sorted: {} before {}",
-                    self.tables[i - 1].tag, self.tables[i].tag
-                ));
-            }
-        }
-
-        // head table structural checks
-        if self.head.magic_number != 0x5F0F3CF5 {
-            issues.push(format!(
-                "head.magicNumber is 0x{:08X}, expected 0x5F0F3CF5",
-                self.head.magic_number
-            ));
-        }
-        if self.head.units_per_em < 16 || self.head.units_per_em > 16384 {
-            issues.push(format!(
-                "head.unitsPerEm is {}, expected 16..16384",
-                self.head.units_per_em
-            ));
-        }
-
-        // hhea consistency
-        if self.hhea.number_of_hmetrics > self.maxp.num_glyphs {
-            issues.push(format!(
-                "hhea.numberOfHMetrics ({}) > maxp.numGlyphs ({})",
-                self.hhea.number_of_hmetrics, self.maxp.num_glyphs
-            ));
-        }
-
-        // glyf and loca should appear together for TrueType outlines
-        let has_glyf = self.tables.iter().any(|t| t.tag == Tag::new(b"glyf"));
-        let has_loca = self.tables.iter().any(|t| t.tag == Tag::new(b"loca"));
-        if has_glyf != has_loca {
-            issues.push(format!(
-                "glyf and loca must both be present or both absent (glyf={}, loca={})",
-                has_glyf, has_loca
-            ));
-        }
-
-        // Verify checksums from raw buffer
-        for rec in &self.tables {
-            let start = rec.offset as usize;
-            let end = start + rec.length as usize;
-            if end > buf.len() {
-                issues.push(format!(
-                    "Table {} extends beyond file (offset {}, length {}, file {})",
-                    rec.tag, rec.offset, rec.length, buf.len()
-                ));
-                continue;
-            }
-            let data = &buf[start..end];
-            let mut padded = data.to_vec();
-            while padded.len() % 4 != 0 {
-                padded.push(0);
-            }
-            let computed = calc_checksum(&padded);
-            if rec.tag == Head::tag() {
-                // head checksum ignores checkSumAdjustment field
-                let mut head_data = padded.clone();
-                if head_data.len() >= 12 {
-                    head_data[8..12].copy_from_slice(&[0, 0, 0, 0]);
-                }
-                let head_checksum = calc_checksum(&head_data);
-                if head_checksum != rec.checksum {
-                    issues.push(format!(
-                        "head checksum mismatch: computed {} != recorded {}",
-                        head_checksum, rec.checksum
-                    ));
-                }
-            } else if computed != rec.checksum {
-                issues.push(format!(
-                    "Table {} checksum mismatch: computed {} != recorded {}",
-                    rec.tag, computed, rec.checksum
-                ));
-            }
-        }
-
-        issues
+        self.validate_report(buf)
+            .issues
+            .into_iter()
+            .map(|i| i.message)
+            .collect()
     }
 }

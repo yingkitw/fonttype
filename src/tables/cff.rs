@@ -57,11 +57,10 @@ impl Cff {
                 name_index = names.into_iter().map(|b| String::from_utf8_lossy(b).to_string()).collect();
                 // Top DICT INDEX follows Name INDEX
                 let top_idx_offset = index_end(data, name_idx_offset);
-                if let Ok(dict_data) = parse_index(data, top_idx_offset) {
-                    if let Some(td) = dict_data.into_iter().next() {
-                        top_dict = parse_dict(&td);
+                if let Ok(dict_data) = parse_index(data, top_idx_offset)
+                    && let Some(td) = dict_data.into_iter().next() {
+                        top_dict = parse_dict(td);
                     }
-                }
                 // String INDEX follows Top DICT INDEX
                 let string_idx_offset = index_end(data, top_idx_offset);
                 // Global Subr INDEX follows String INDEX
@@ -108,11 +107,10 @@ impl Cff {
 /// Extract the first integer operand for a given operator from the Top DICT.
 fn top_dict_int(entries: &[TopDictEntry], operator: u16) -> Option<i32> {
     for entry in entries {
-        if entry.operator == operator {
-            if let Some(DictOperand::Integer(v)) = entry.operands.first() {
+        if entry.operator == operator
+            && let Some(DictOperand::Integer(v)) = entry.operands.first() {
                 return Some(*v);
             }
-        }
     }
     None
 }
@@ -133,7 +131,7 @@ impl Table for Cff {
     }
 }
 
-fn parse_index<'a>(buf: &'a [u8], offset: usize) -> Result<Vec<&'a [u8]>, FontError> {
+fn parse_index(buf: &[u8], offset: usize) -> Result<Vec<&[u8]>, FontError> {
     let mut p = Parser::new(buf, offset);
     let count = p.u16()? as usize;
     if count == 0 {
@@ -170,7 +168,7 @@ fn index_end(buf: &[u8], offset: usize) -> usize {
     let data_offset = offset + 2 + 1 + (count + 1) * off_size;
     let last_off = match off_size {
         1 => {
-            p.advance(count * 1);
+            p.advance(count);
             p.u8().unwrap_or(0) as usize
         }
         2 => {
@@ -216,14 +214,14 @@ fn parse_dict(data: &[u8]) -> Vec<TopDictEntry> {
             } else {
                 break;
             }
-        } else if b0 >= 32 && b0 <= 246 {
+        } else if (32..=246).contains(&b0) {
             operands.push(DictOperand::Integer((b0 as i32) - 139));
             i += 1;
-        } else if b0 >= 247 && b0 <= 250 {
+        } else if (247..=250).contains(&b0) {
             if i + 1 >= data.len() { break; }
             operands.push(DictOperand::Integer(((b0 as i32) - 247) * 256 + (data[i + 1] as i32) + 108));
             i += 2;
-        } else if b0 >= 251 && b0 <= 254 {
+        } else if (251..=254).contains(&b0) {
             if i + 1 >= data.len() { break; }
             operands.push(DictOperand::Integer(-((b0 as i32) - 251) * 256 - (data[i + 1] as i32) - 108));
             i += 2;

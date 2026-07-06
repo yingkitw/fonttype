@@ -2,6 +2,12 @@ pub struct Writer {
     buf: Vec<u8>,
 }
 
+impl Default for Writer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Writer {
     pub fn new() -> Self {
         Writer { buf: Vec::new() }
@@ -17,6 +23,10 @@ impl Writer {
 
     pub fn len(&self) -> usize {
         self.buf.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
     }
 
     pub fn write_u8(&mut self, v: u8) {
@@ -69,7 +79,7 @@ impl Writer {
     }
 
     pub fn pad_to_4(&mut self) {
-        while self.buf.len() % 4 != 0 {
+        while !self.buf.len().is_multiple_of(4) {
             self.buf.push(0);
         }
     }

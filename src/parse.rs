@@ -31,7 +31,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn slice(&self, len: usize) -> Result<&'a [u8], FontError> {
-        let end = self.offset.checked_add(len).ok_or_else(|| {
+        let end = self.offset.checked_add(len).ok_or({
             FontError::OutOfBounds {
                 offset: self.offset,
                 length: len,
@@ -135,9 +135,7 @@ pub fn checksum_table(data: &[u8]) -> u32 {
     // Handle trailing bytes (pad with zeros)
     if i < data.len() {
         let mut remainder = [0u8; 4];
-        for j in i..data.len() {
-            remainder[j - i] = data[j];
-        }
+        remainder[..(data.len() - i)].copy_from_slice(&data[i..]);
         sum = sum.wrapping_add(u32::from_be_bytes(remainder));
     }
     sum

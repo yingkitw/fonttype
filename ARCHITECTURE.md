@@ -9,6 +9,9 @@
 ├── SPEC.md
 ├── TODO.md
 ├── ARCHITECTURE.md
+├── examples/          — standalone usage examples
+├── tests/
+│   └── integration.rs — end-to-end tests (round-trip, parsing, format coverage)
 └── src
     ├── lib.rs          — public exports
     ├── main.rs         — CLI entry point
@@ -16,28 +19,41 @@
     ├── parse.rs        — Binary reading helpers (big-endian, offsets)
     ├── write.rs        — Binary writing helpers
     ├── font.rs         — Core Font struct and table directory
-    ├── woff.rs       — WOFF read/write
-    ├── woff2.rs      — WOFF2 read/write (Brotli)
+    ├── woff.rs         — WOFF read/write
+    ├── woff2.rs        — WOFF2 read/write (Brotli)
     ├── ttc.rs          — TrueType Collection parsing
+    ├── bezier.rs       — Bezier curve editor (kurbo-backed)
+    ├── encoding.rs     — Legacy char encodings (Latin-1, Windows-1252, Mac Roman)
+    ├── modifier.rs     — Builder-style FontModifier API
+    ├── validation.rs   — Structured ValidationReport types
+    ├── image
+    │   ├── mod.rs      — module root
+    │   ├── tracer.rs   — bitmap → glyph outline tracer
+    │   └── rasterizer.rs — glyph → PNG rasterizer
     └── tables
-        ├── mod.rs      — Table trait and registry
-        ├── head.rs     — head table
-        ├── hhea.rs     — hhea table
-        ├── maxp.rs     — maxp table
-        ├── post.rs     — post table
-        ├── name.rs     — name table
-        ├── cmap.rs     — cmap table
-        ├── os2.rs      — OS/2 table
-        ├── glyf.rs     — glyph data (simple + composite)
-        ├── loca.rs     — glyph offsets
-        ├── hmtx.rs     — horizontal metrics
-        ├── kern.rs     — kerning
-        ├── gpos.rs     — GPOS (kerning pairs)
-        ├── gsub.rs     — GSUB (features)
-        ├── var.rs      — HVAR / gvar passthrough
-        ├── fvar.rs     — variable font axes
-        ├── stat.rs     — STAT style attributes
-        └── cff.rs      — CFF / CFF2 PostScript outlines
+        ├── mod.rs           — Table trait and module registry
+        ├── head.rs          — head table
+        ├── hhea.rs          — hhea table
+        ├── maxp.rs          — maxp table
+        ├── post.rs          — post table
+        ├── name.rs          — name table
+        ├── cmap.rs          — cmap table (formats 0, 4, 6, 10, 12, 13, 14)
+        ├── os2.rs           — OS/2 table
+        ├── glyf.rs          — glyph data (simple + composite)
+        ├── loca.rs          — glyph offsets
+        ├── hmtx.rs          — horizontal metrics
+        ├── kern.rs          — kerning
+        ├── hinting.rs       — cvt / prep / fpgm (raw byte passthrough)
+        ├── gpos.rs          — GPOS (kerning pairs)
+        ├── gsub.rs          — GSUB (ScriptList, FeatureList, LookupList)
+        ├── var.rs           — HVAR / gvar passthrough
+        ├── fvar.rs          — variable font axes
+        ├── stat.rs          — STAT style attributes
+        ├── cff.rs           — CFF / CFF2 PostScript outlines (header + INDEX)
+        ├── cff_charstring.rs — CFF Type 2 CharString decoder
+        ├── colr.rs          — COLR color glyph layers (v0)
+        ├── cpal.rs          — CPAL color palettes (v0)
+        └── svg.rs           — SVG glyph artwork (v0)
 ```
 
 ## Core Abstractions
@@ -61,6 +77,9 @@ pub struct Font {
     pub loca: Option<LocaTable>,
     pub hmtx: Hmtx,
     pub kern: Option<Kern>,
+    pub cvt: Option<Vec<u8>>,
+    pub prep: Option<Vec<u8>>,
+    pub fpgm: Option<Vec<u8>>,
     pub gpos: Option<Gpos>,
     pub gsub: Option<Gsub>,
     pub hvar: Option<Hvar>,
@@ -68,6 +87,9 @@ pub struct Font {
     pub fvar: Option<Fvar>,
     pub stat: Option<Stat>,
     pub cff: Option<Cff>,
+    pub colr: Option<Colr>,
+    pub cpal: Option<Cpal>,
+    pub svg: Option<Svg>,
     pub raw_tables: Vec<(Tag, Vec<u8>)>,
 }
 ```
@@ -119,3 +141,4 @@ All fallible operations return `FontError`, a `thiserror` enum covering:
 - `flate2` — WOFF zlib compression/decompression
 - `brotli` — WOFF2 Brotli compression/decompression
 - `image` — PNG rasterization and bitmap tracing
+- `kurbo` — 2D bezier path geometry used by `bezier.rs`

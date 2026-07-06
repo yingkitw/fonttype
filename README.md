@@ -160,4 +160,4 @@ See `ARCHITECTURE.md` and `SPEC.md`.
 
 ## License
 
-MIT
+Apache-2.0

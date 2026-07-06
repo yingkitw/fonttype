@@ -164,7 +164,7 @@ fn parse_script_list(data: &[u8], offset: usize) -> Result<Vec<ScriptRecord>, Fo
 
 fn parse_lang_sys(data: &[u8], offset: usize) -> Result<LangSys, FontError> {
     let mut p = Parser::new(data, offset);
-    let lookup_order = p.u16()?;
+    let _lookup_order = p.u16()?;
     let required_feature_index = p.u16()?;
     let feature_index_count = p.u16()? as usize;
     let mut lookup_indices = Vec::with_capacity(feature_index_count);

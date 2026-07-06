@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use fonttype::Table;
 
 #[derive(Parser)]
-#[command(name = "fonttool")]
+#[command(name = "fonttype")]
 #[command(about = "Read and write TrueType / OpenType font files")]
 struct Cli {
     #[command(subcommand)]
@@ -232,18 +232,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             font.maxp.num_glyphs = 2;
             font.hhea.number_of_hmetrics = 2;
             // Update cmap to map codepoint to glyph 1
-            if let Some(ref mut cmap) = font.cmap.subtables.first_mut() {
-                match cmap {
-                    fonttype::tables::cmap::CmapSubtable::Format12 { groups, .. } => {
-                        groups.push(fonttype::tables::cmap::SequentialMapGroup {
-                            start_char_code: codepoint,
-                            end_char_code: codepoint,
-                            start_glyph_id: 1,
-                        });
-                    }
-                    _ => {}
+            if let Some(ref mut cmap) = font.cmap.subtables.first_mut()
+                && let fonttype::tables::cmap::CmapSubtable::Format12 { groups, .. } = cmap {
+                    groups.push(fonttype::tables::cmap::SequentialMapGroup {
+                        start_char_code: codepoint,
+                        end_char_code: codepoint,
+                        start_glyph_id: 1,
+                    });
                 }
-            }
             std::fs::write(&out, font.write()?)?;
             println!("Created {} from {} for U+{:04X}", out.display(), image.display(), codepoint);
         }
@@ -348,8 +344,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             base_font.hhea.number_of_hmetrics = base_font.hmtx.h_metrics.len() as u16;
             let append_cmap = &append_font.cmap;
-            if let (Some(base_sub), Some(append_sub)) = (base_font.cmap.subtables.first_mut(), append_cmap.subtables.first()) {
-                if let (fonttype::tables::cmap::CmapSubtable::Format12 { groups: base_groups, .. },
+            if let (Some(base_sub), Some(append_sub)) = (base_font.cmap.subtables.first_mut(), append_cmap.subtables.first())
+                && let (fonttype::tables::cmap::CmapSubtable::Format12 { groups: base_groups, .. },
                         fonttype::tables::cmap::CmapSubtable::Format12 { groups: append_groups, .. }) = (base_sub, append_sub) {
                     for group in append_groups {
                         base_groups.push(fonttype::tables::cmap::SequentialMapGroup {
@@ -359,7 +355,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         });
                     }
                 }
-            }
             // GPOS/GSUB/kern/hvar/gvar invalidated by merge
             base_font.gpos = None;
             base_font.gsub = None;
@@ -698,8 +693,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut diffs = Vec::new();
 
             // Table presence
-            let a_tags: std::collections::HashSet<_> = a.tables.iter().map(|t| t.tag.clone()).collect();
-            let b_tags: std::collections::HashSet<_> = b.tables.iter().map(|t| t.tag.clone()).collect();
+            let a_tags: std::collections::HashSet<_> = a.tables.iter().map(|t| t.tag).collect();
+            let b_tags: std::collections::HashSet<_> = b.tables.iter().map(|t| t.tag).collect();
             for tag in a_tags.difference(&b_tags) {
                 diffs.push(format!("Table {} only in {}", tag, font_a.display()));
             }
@@ -786,7 +781,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let padded_len = padded.len() as u32;
                 let checksum = fonttype::parse::checksum_table(&padded);
-                records.push((tag.clone(), checksum, offset, data.len() as u32, padded));
+                records.push((*tag, checksum, offset, data.len() as u32, padded));
                 offset += padded_len;
             }
             for (tag, checksum, off, len, _) in &records {
@@ -896,7 +891,7 @@ fn font_to_ttx(font: &fonttype::Font) -> String {
 
     // cmap
     out.push_str("  <cmap>\n");
-    for (_i, sub) in font.cmap.subtables.iter().enumerate() {
+    for sub in font.cmap.subtables.iter() {
         match sub {
             fonttype::tables::cmap::CmapSubtable::Format0 { language, .. } => {
                 out.push_str(&format!("    <cmapFormat0 platformID=\"{}\" platformEncodingID=\"{}\" language=\"{}\"/>\n", 0, 0, language));
